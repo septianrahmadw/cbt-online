@@ -5,6 +5,7 @@ namespace Database\Seeders;
 use App\Models\Exam;
 use App\Models\InstitutionSetting;
 use App\Models\Participant;
+use App\Models\ParticipantCategory;
 use App\Models\Question;
 use App\Models\User;
 use Illuminate\Database\Seeder;
@@ -29,6 +30,25 @@ class DatabaseSeeder extends Seeder
             'passing_grade_default' => 70,
         ]);
 
+        $categories = [
+            ['name' => 'Umum', 'code' => 'umum', 'description' => 'Peserta umum'],
+            ['name' => 'Gelombang 1', 'code' => 'gelombang-1', 'description' => 'Peserta UTBK Gelombang 1'],
+            ['name' => 'Prodi TI', 'code' => 'prodi-ti', 'description' => 'Peserta Program Studi Teknik Informatika'],
+            ['name' => 'Prodi TL', 'code' => 'prodi-tl', 'description' => 'Peserta Program Studi Teknik Listrik'],
+        ];
+
+        foreach ($categories as $category) {
+            ParticipantCategory::updateOrCreate(
+                ['code' => $category['code']],
+                ['name' => $category['name'], 'description' => $category['description'], 'is_active' => true]
+            );
+        }
+
+        $prodiTi = ParticipantCategory::where('code', 'prodi-ti')->firstOrFail();
+        $prodiTl = ParticipantCategory::where('code', 'prodi-tl')->firstOrFail();
+        $gelombang1 = ParticipantCategory::where('code', 'gelombang-1')->firstOrFail();
+        $umum = ParticipantCategory::where('code', 'umum')->firstOrFail();
+
         $participants = [
             'Ahmad Fauzi', 'Budi Santoso', 'Citra Lestari', 'Dewi Anggraini', 'Eko Prasetyo',
             'Fitri Handayani', 'Gilang Ramadhan', 'Hesti Purwanti', 'Indra Wijaya', 'Joko Susilo',
@@ -37,12 +57,20 @@ class DatabaseSeeder extends Seeder
         ];
 
         foreach ($participants as $index => $name) {
+            $category = match (true) {
+                $index < 5 => $prodiTi,
+                $index < 10 => $prodiTl,
+                $index < 15 => $gelombang1,
+                default => $umum,
+            };
+
             Participant::updateOrCreate(
                 ['exam_number' => '2026'.str_pad((string) ($index + 1), 3, '0', STR_PAD_LEFT)],
                 [
                     'full_name' => $name,
                     'nisn' => '00'.str_pad((string) ($index + 1), 8, '0', STR_PAD_LEFT),
                     'class_name' => 'XII IPA '.((int) floor($index / 5) + 1),
+                    'category_id' => $category->id,
                     'is_active' => true,
                 ]
             );

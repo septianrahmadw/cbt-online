@@ -4,6 +4,7 @@ namespace App\Http\Controllers\Admin;
 
 use App\Http\Controllers\Controller;
 use App\Models\Exam;
+use App\Models\ParticipantCategory;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Inertia\Inertia;
@@ -13,7 +14,8 @@ class ExamController extends Controller
 {
     public function index(): Response
     {
-        $exams = Exam::withCount(['questions', 'sessions', 'results'])
+        $exams = Exam::with(['participantCategories' => fn ($query) => $query->orderBy('name')->get(['participant_categories.id', 'name', 'code'])])
+            ->withCount(['questions', 'sessions', 'results', 'participantCategories'])
             ->latest()
             ->paginate(10);
 
@@ -22,20 +24,54 @@ class ExamController extends Controller
         ]);
     }
 
+    public function create(): Response
+    {
+        return Inertia::render('Admin/Exams/Form', [
+            'exam' => null,
+            'categories' => $this->categoryOptions(),
+        ]);
+    }
+
     public function store(Request $request): RedirectResponse
     {
         $data = $this->validated($request);
-        Exam::create($data);
+        $exam = Exam::create($data['exam']);
+        $exam->participantCategories()->sync($data['category_ids']);
 
-        return back()->with('success', 'Ujian berhasil dibuat.');
+        return redirect()
+            ->route('admin.exams.index')
+            ->with('success', 'Ujian berhasil dibuat.');
+    }
+
+    public function edit(Exam $exam): Response
+    {
+        $exam->load('participantCategories:id,name,code');
+
+        return Inertia::render('Admin/Exams/Form', [
+            'exam' => [
+                'id' => $exam->id,
+                'title' => $exam->title,
+                'subject_name' => $exam->subject_name,
+                'duration_minutes' => $exam->duration_minutes,
+                'exam_date' => $exam->exam_date?->format('Y-m-d\TH:i'),
+                'is_active' => $exam->is_active,
+                'randomize_questions' => $exam->randomize_questions,
+                'passing_grade' => $exam->passing_grade,
+                'category_ids' => $exam->participantCategories->pluck('id')->values(),
+            ],
+            'categories' => $this->categoryOptions(),
+        ]);
     }
 
     public function update(Request $request, Exam $exam): RedirectResponse
     {
         $data = $this->validated($request);
-        $exam->update($data);
+        $exam->update($data['exam']);
+        $exam->participantCategories()->sync($data['category_ids']);
 
-        return back()->with('success', 'Ujian diperbarui.');
+        return redirect()
+            ->route('admin.exams.index')
+            ->with('success', 'Ujian diperbarui.');
     }
 
     public function destroy(Exam $exam): RedirectResponse
@@ -46,7 +82,7 @@ class ExamController extends Controller
     }
 
     /**
-     * @return array<string, mixed>
+     * @return array{exam: array<string, mixed>, category_ids: array<int>}
      */
     private function validated(Request $request): array
     {
@@ -58,11 +94,42 @@ class ExamController extends Controller
             'is_active' => ['boolean'],
             'randomize_questions' => ['boolean'],
             'passing_grade' => ['required', 'integer', 'min:0', 'max:100'],
+            'category_ids' => ['nullable', 'array'],
+            'category_ids.*' => ['integer', 'exists:participant_categories,id'],
         ]);
 
-        $data['is_active'] = (bool) ($data['is_active'] ?? false);
-        $data['randomize_questions'] = (bool) ($data['randomize_questions'] ?? false);
+        $exam = [
+            'title' => $data['title'],
+            'subject_name' => $data['subject_name'],
+            'duration_minutes' => $data['duration_minutes'],
+            'exam_date' => $data['exam_date'] ?? null,
+            'is_active' => (bool) ($data['is_active'] ?? false),
+            'randomize_questions' => (bool) ($data['randomize_questions'] ?? false),
+            'passing_grade' => $data['passing_grade'],
+        ];
 
-        return $data;
+        return [
+            'exam' => $exam,
+            'category_ids' => $data['category_ids'] ?? [],
+        ];
+    }
+
+    /**
+     * @return array<int, array{id: int, name: string, code: string, participants_count: int}>
+     */
+    private function categoryOptions(): array
+    {
+        return ParticipantCategory::where('is_active', true)
+            ->withCount('participants')
+            ->orderBy('name')
+            ->get(['id', 'name', 'code'])
+            ->map(fn (ParticipantCategory $category) => [
+                'id' => $category->id,
+                'name' => $category->name,
+                'code' => $category->code,
+                'participants_count' => $category->participants_count,
+            ])
+            ->values()
+            ->all();
     }
 }

@@ -5,6 +5,7 @@ namespace Tests\Feature;
 use App\Models\Exam;
 use App\Models\ExamSession;
 use App\Models\Participant;
+use App\Models\ParticipantCategory;
 use App\Models\Question;
 use App\Models\QuestionOption;
 use Illuminate\Foundation\Testing\RefreshDatabase;
@@ -131,5 +132,77 @@ class ExamFlowTest extends TestCase
         ])->assertSessionHasErrors('full_name');
 
         $this->assertDatabaseCount('exam_sessions', 0);
+    }
+
+    public function test_participant_login_tolerates_messy_input(): void
+    {
+        $this->post('/exam/login', [
+            'exam_id' => $this->exam->id,
+            'exam_number' => ' 2026001 ',
+            'full_name' => '  budi   santoso  ',
+        ])->assertRedirect('/exam/workspace');
+
+        $this->assertDatabaseCount('exam_sessions', 1);
+    }
+
+    public function test_participant_from_unallowed_category_is_rejected(): void
+    {
+        $category = ParticipantCategory::create([
+            'name' => 'Prodi TI',
+            'code' => 'prodi-ti',
+            'is_active' => true,
+        ]);
+
+        $other = Participant::create([
+            'exam_number' => '2026002',
+            'full_name' => 'Ani Rahma',
+            'class_name' => 'XII IPA 2',
+            'category_id' => null,
+            'is_active' => true,
+        ]);
+
+        $this->exam->participantCategories()->attach($category->id);
+
+        $this->post('/exam/login', [
+            'exam_id' => $this->exam->id,
+            'exam_number' => $other->exam_number,
+            'full_name' => $other->full_name,
+        ])->assertSessionHasErrors('exam_id');
+
+        $this->assertDatabaseCount('exam_sessions', 0);
+    }
+
+    public function test_participant_from_allowed_category_can_login(): void
+    {
+        $category = ParticipantCategory::create([
+            'name' => 'Prodi TI',
+            'code' => 'prodi-ti',
+            'is_active' => true,
+        ]);
+
+        $this->participant->update(['category_id' => $category->id]);
+
+        $this->exam->participantCategories()->attach($category->id);
+
+        $this->post('/exam/login', [
+            'exam_id' => $this->exam->id,
+            'exam_number' => '2026001',
+            'full_name' => 'Budi Santoso',
+        ])->assertRedirect('/exam/workspace');
+
+        $this->assertDatabaseCount('exam_sessions', 1);
+    }
+
+    public function test_exam_without_registered_categories_is_open_to_all_active_participants(): void
+    {
+        $this->assertSame(0, $this->exam->participantCategories()->count());
+
+        $this->post('/exam/login', [
+            'exam_id' => $this->exam->id,
+            'exam_number' => '2026001',
+            'full_name' => 'Budi Santoso',
+        ])->assertRedirect('/exam/workspace');
+
+        $this->assertDatabaseCount('exam_sessions', 1);
     }
 }

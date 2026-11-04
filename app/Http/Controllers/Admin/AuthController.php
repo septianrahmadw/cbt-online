@@ -3,9 +3,11 @@
 namespace App\Http\Controllers\Admin;
 
 use App\Http\Controllers\Controller;
+use App\Models\User;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
+use Illuminate\Support\Facades\Hash;
 use Inertia\Inertia;
 use Inertia\Response;
 
@@ -22,18 +24,33 @@ class AuthController extends Controller
 
     public function store(Request $request): RedirectResponse
     {
-        $credentials = $request->validate([
-            'email' => ['required', 'email'],
+        $request->validate([
+            'email' => ['required', 'string'],
             'password' => ['required', 'string'],
         ]);
 
-        if (! Auth::attempt($credentials, $request->boolean('remember'))) {
-            return back()->withErrors(['email' => 'Email atau password salah.'])->onlyInput('email');
+        $loginInput = trim((string) $request->input('email'));
+        $password = (string) $request->input('password');
+
+        // Check by direct credentials first
+        if (Auth::attempt(['email' => $loginInput, 'password' => $password], $request->boolean('remember'))) {
+            $request->session()->regenerate();
+
+            return redirect()->intended(route('admin.dashboard'));
         }
 
-        $request->session()->regenerate();
+        // Support username 'admin' matching 'admin@cbt.test'
+        if (strtolower($loginInput) === 'admin') {
+            $user = User::where('email', 'admin@cbt.test')->first();
+            if ($user && Hash::check($password, $user->password)) {
+                Auth::login($user, $request->boolean('remember'));
+                $request->session()->regenerate();
 
-        return redirect()->intended(route('admin.dashboard'));
+                return redirect()->intended(route('admin.dashboard'));
+            }
+        }
+
+        return back()->withErrors(['email' => 'Email/username atau password salah.'])->onlyInput('email');
     }
 
     public function destroy(Request $request): RedirectResponse

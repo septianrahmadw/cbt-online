@@ -9,6 +9,7 @@ import {
     LogOut,
     Menu,
     Settings,
+    Tags,
     Users,
     X,
 } from 'lucide-react';
@@ -20,7 +21,8 @@ import { cn } from '../lib/utils';
 
 const navigation = [
     { href: '/admin', label: 'Dashboard', icon: LayoutDashboard, exact: true },
-    { href: '/admin/participants', label: 'Peserta', icon: Users, exact: false },
+    { href: '/admin/participants', label: 'Peserta', icon: Users, exact: true },
+    { href: '/admin/participant-categories', label: 'Kategori Peserta', icon: Tags, exact: false },
     { href: '/admin/exams', label: 'Daftar Ujian', icon: FileText, exact: false },
     { href: '/admin/questions', label: 'Bank Soal', icon: BookOpen, exact: false },
     { href: '/admin/modules', label: 'Modul Soal', icon: ClipboardList, exact: false },

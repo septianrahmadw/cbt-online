@@ -4,6 +4,7 @@ namespace App\Http\Controllers\Admin;
 
 use App\Http\Controllers\Controller;
 use App\Models\Participant;
+use App\Models\ParticipantCategory;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
@@ -16,8 +17,10 @@ class ParticipantController extends Controller
     public function index(Request $request): Response
     {
         $search = trim((string) $request->query('search', ''));
+        $categoryId = $request->integer('category_id') ?: null;
 
         $participants = Participant::query()
+            ->with('category:id,name,code')
             ->withCount('results')
             ->when($search !== '', function ($query) use ($search) {
                 $query->where(function ($q) use ($search) {
@@ -26,25 +29,25 @@ class ParticipantController extends Controller
                         ->orWhere('nisn', 'like', "%{$search}%");
                 });
             })
+            ->when($categoryId, fn ($query) => $query->where('category_id', $categoryId))
             ->orderBy('full_name')
             ->paginate(15)
             ->withQueryString();
 
+        $categories = ParticipantCategory::where('is_active', true)
+            ->orderBy('name')
+            ->get(['id', 'name', 'code']);
+
         return Inertia::render('Admin/Participants', [
             'participants' => $participants,
-            'filters' => ['search' => $search],
+            'filters' => ['search' => $search, 'category_id' => $categoryId],
+            'categories' => $categories,
         ]);
     }
 
     public function store(Request $request): RedirectResponse
     {
-        $data = $request->validate([
-            'exam_number' => ['required', 'string', 'max:50', 'unique:participants,exam_number'],
-            'full_name' => ['required', 'string', 'max:150'],
-            'nisn' => ['nullable', 'string', 'max:30'],
-            'class_name' => ['nullable', 'string', 'max:50'],
-            'is_active' => ['boolean'],
-        ]);
+        $data = $this->validated($request);
 
         Participant::create($data);
 
@@ -53,13 +56,7 @@ class ParticipantController extends Controller
 
     public function update(Request $request, Participant $participant): RedirectResponse
     {
-        $data = $request->validate([
-            'exam_number' => ['required', 'string', 'max:50', 'unique:participants,exam_number,'.$participant->id],
-            'full_name' => ['required', 'string', 'max:150'],
-            'nisn' => ['nullable', 'string', 'max:30'],
-            'class_name' => ['nullable', 'string', 'max:50'],
-            'is_active' => ['boolean'],
-        ]);
+        $data = $this->validated($request, $participant);
 
         $participant->update($data);
 
@@ -120,6 +117,22 @@ class ParticipantController extends Controller
                     'is_active' => true,
                 ];
 
+                if (isset($index['category_code'])) {
+                    $code = trim((string) ($row[$index['category_code']] ?? ''));
+
+                    if ($code !== '') {
+                        $category = ParticipantCategory::where('code', $code)->first();
+
+                        if (! $category) {
+                            $failed++;
+
+                            continue;
+                        }
+
+                        $payload['category_id'] = $category->id;
+                    }
+                }
+
                 $participant = Participant::where('exam_number', $examNumber)->first();
 
                 if ($participant) {
@@ -143,9 +156,24 @@ class ParticipantController extends Controller
 
         return response()->streamDownload(function () {
             $output = fopen('php://output', 'w');
-            fputcsv($output, ['exam_number', 'full_name', 'nisn', 'class_name']);
-            fputcsv($output, ['2026001', 'Contoh Peserta', '1234567890', 'XII IPA 1']);
+            fputcsv($output, ['exam_number', 'full_name', 'nisn', 'class_name', 'category_code']);
+            fputcsv($output, ['2026001', 'Contoh Peserta', '1234567890', 'XII IPA 1', 'umum']);
             fclose($output);
         }, 'template-peserta.csv', $headers);
+    }
+
+    /**
+     * @return array<string, mixed>
+     */
+    private function validated(Request $request, ?Participant $participant = null): array
+    {
+        return $request->validate([
+            'exam_number' => ['required', 'string', 'max:50', 'unique:participants,exam_number,'.($participant->id ?? 'null')],
+            'full_name' => ['required', 'string', 'max:150'],
+            'nisn' => ['nullable', 'string', 'max:30'],
+            'class_name' => ['nullable', 'string', 'max:50'],
+            'category_id' => ['nullable', 'integer', 'exists:participant_categories,id'],
+            'is_active' => ['boolean'],
+        ]);
     }
 }

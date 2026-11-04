@@ -21,7 +21,10 @@ class AdminTest extends TestCase
 
         $this->get('/admin')->assertOk()->assertInertia(fn (Assert $page) => $page->component('Admin/Dashboard'));
         $this->get('/admin/participants')->assertOk()->assertInertia(fn (Assert $page) => $page->component('Admin/Participants'));
+        $this->get('/admin/participant-categories')->assertOk()->assertInertia(fn (Assert $page) => $page->component('Admin/ParticipantCategories/Index'));
+        $this->get('/admin/participant-categories/create')->assertOk()->assertInertia(fn (Assert $page) => $page->component('Admin/ParticipantCategories/Form'));
         $this->get('/admin/exams')->assertOk()->assertInertia(fn (Assert $page) => $page->component('Admin/Exams'));
+        $this->get('/admin/exams/create')->assertOk()->assertInertia(fn (Assert $page) => $page->component('Admin/Exams/Form'));
         $this->get('/admin/modules')->assertOk()->assertInertia(fn (Assert $page) => $page->component('Admin/Modules/Index'));
         $this->get('/admin/questions')->assertOk()->assertInertia(fn (Assert $page) => $page->component('Admin/Questions'));
         $this->get('/admin/results')->assertOk()->assertInertia(fn (Assert $page) => $page->component('Admin/Results'));

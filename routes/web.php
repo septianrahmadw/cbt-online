@@ -4,6 +4,7 @@ use App\Http\Controllers\Admin\AuthController as AdminAuthController;
 use App\Http\Controllers\Admin\DashboardController;
 use App\Http\Controllers\Admin\ExamController;
 use App\Http\Controllers\Admin\ModuleController;
+use App\Http\Controllers\Admin\ParticipantCategoryController;
 use App\Http\Controllers\Admin\ParticipantController;
 use App\Http\Controllers\Admin\QuestionController;
 use App\Http\Controllers\Admin\ResultController;
@@ -27,11 +28,14 @@ Route::prefix('admin')->name('admin.')->group(function () {
         Route::get('settings', [SettingController::class, 'edit'])->name('settings.edit');
         Route::match(['put', 'post'], 'settings', [SettingController::class, 'update'])->name('settings.update');
 
+        Route::resource('participant-categories', ParticipantCategoryController::class)
+            ->except(['show']);
+
         Route::get('participants/template', [ParticipantController::class, 'template'])->name('participants.template');
         Route::post('participants/import', [ParticipantController::class, 'import'])->name('participants.import');
         Route::resource('participants', ParticipantController::class)->except(['create', 'show', 'edit']);
 
-        Route::resource('exams', ExamController::class)->except(['create', 'show', 'edit']);
+        Route::resource('exams', ExamController::class)->except(['show']);
 
         Route::resource('modules', ModuleController::class);
 

@@ -1,8 +1,13 @@
-import { Link, router, useForm } from '@inertiajs/react';
-import { BookOpen, Pencil, Plus, Trash2 } from 'lucide-react';
-import { useState } from 'react';
-import { Badge, Button, Card, EmptyState, Input, Label, Modal, Select } from '../../components/ui';
+import { Link, router } from '@inertiajs/react';
+import { BookOpen, Pencil, Plus, Trash2, Users } from 'lucide-react';
+import { Badge, Card, EmptyState } from '../../components/ui';
 import { AdminLayout } from '../../layouts/AdminLayout';
+
+interface ExamCategory {
+    id: number;
+    name: string;
+    code: string;
+}
 
 interface Exam {
     id: number;
@@ -17,6 +22,8 @@ interface Exam {
     questions_count: number;
     sessions_count: number;
     results_count: number;
+    participant_categories_count: number;
+    participant_categories: ExamCategory[];
 }
 
 interface Paginator {
@@ -28,70 +35,7 @@ interface Paginator {
     total: number;
 }
 
-function toLocalInput(value: string | null): string {
-    if (!value) {
-        return '';
-    }
-
-    const date = new Date(value);
-    const offset = date.getTimezoneOffset();
-    return new Date(date.getTime() - offset * 60_000).toISOString().slice(0, 16);
-}
-
 export default function Exams({ exams }: { exams: Paginator }) {
-    const [modalOpen, setModalOpen] = useState(false);
-    const [editing, setEditing] = useState<Exam | null>(null);
-
-    const form = useForm({
-        title: '',
-        subject_name: '',
-        duration_minutes: 60,
-        exam_date: '',
-        is_active: true,
-        randomize_questions: true,
-        passing_grade: 70,
-    });
-
-    const openCreate = () => {
-        setEditing(null);
-        form.reset();
-        form.clearErrors();
-        setModalOpen(true);
-    };
-
-    const openEdit = (exam: Exam) => {
-        setEditing(exam);
-        form.setData({
-            title: exam.title,
-            subject_name: exam.subject_name,
-            duration_minutes: exam.duration_minutes,
-            exam_date: toLocalInput(exam.exam_date),
-            is_active: exam.is_active,
-            randomize_questions: exam.randomize_questions,
-            passing_grade: exam.passing_grade,
-        });
-        form.clearErrors();
-        setModalOpen(true);
-    };
-
-    const submit = (event: React.FormEvent) => {
-        event.preventDefault();
-
-        const options = {
-            preserveScroll: true,
-            onSuccess: () => {
-                setModalOpen(false);
-                form.reset();
-            },
-        };
-
-        if (editing) {
-            form.put(`/admin/exams/${editing.id}`, options);
-        } else {
-            form.post('/admin/exams', options);
-        }
-    };
-
     const remove = (exam: Exam) => {
         if (window.confirm(`Hapus ujian ${exam.title}? Semua soal dan hasil terkait akan terhapus.`)) {
             router.delete(`/admin/exams/${exam.id}`, { preserveScroll: true });
@@ -103,14 +47,14 @@ export default function Exams({ exams }: { exams: Paginator }) {
             title="Daftar Ujian"
             subtitle={`${exams.total} ujian terdaftar.`}
             actions={
-                <Button onClick={openCreate}>
+                <Link href="/admin/exams/create" className="btn-primary h-10 px-3">
                     <Plus size={16} /> Buat Ujian
-                </Button>
+                </Link>
             }
         >
             <Card>
                 {exams.data.length === 0 ? (
-                    <EmptyState>Belum ada ujian. Klik "Buat Ujian" untuk memulai.</EmptyState>
+                    <EmptyState>Belum ada ujian. Klik &quot;Buat Ujian&quot; untuk memulai.</EmptyState>
                 ) : (
                     <div className="overflow-x-auto">
                         <table className="w-full text-sm">
@@ -119,6 +63,7 @@ export default function Exams({ exams }: { exams: Paginator }) {
                                     <th className="pb-2">Ujian</th>
                                     <th className="pb-2">Durasi</th>
                                     <th className="pb-2">Soal</th>
+                                    <th className="pb-2">Kategori Peserta</th>
                                     <th className="pb-2">Peserta Selesai</th>
                                     <th className="pb-2">Status</th>
                                     <th className="pb-2 text-right">Aksi</th>
@@ -138,6 +83,20 @@ export default function Exams({ exams }: { exams: Paginator }) {
                                         </td>
                                         <td className="py-2 text-slate-700 dark:text-slate-300">{exam.duration_minutes} menit</td>
                                         <td className="py-2 text-slate-700 dark:text-slate-300">{exam.questions_count}</td>
+                                        <td className="py-2 text-slate-700 dark:text-slate-300">
+                                            {exam.participant_categories_count > 0 ? (
+                                                <div className="flex flex-wrap items-center gap-1">
+                                                    <Users size={14} className="shrink-0" />
+                                                    {exam.participant_categories.map((category) => (
+                                                        <Badge key={category.id} tone="blue">
+                                                            {category.name}
+                                                        </Badge>
+                                                    ))}
+                                                </div>
+                                            ) : (
+                                                <span className="text-slate-500 dark:text-slate-400">Semua peserta</span>
+                                            )}
+                                        </td>
                                         <td className="py-2 text-slate-700 dark:text-slate-300">{exam.results_count}</td>
                                         <td className="py-2">
                                             <Badge tone={exam.is_active ? 'green' : 'slate'}>
@@ -153,14 +112,13 @@ export default function Exams({ exams }: { exams: Paginator }) {
                                                 >
                                                     <BookOpen size={15} />
                                                 </Link>
-                                                <button
-                                                    type="button"
-                                                    onClick={() => openEdit(exam)}
+                                                <Link
+                                                    href={`/admin/exams/${exam.id}/edit`}
                                                     className="rounded-md p-2 text-slate-500 transition hover:bg-slate-100 hover:text-slate-700 dark:text-slate-400 dark:hover:bg-slate-800 dark:hover:text-slate-200"
                                                     aria-label="Edit"
                                                 >
                                                     <Pencil size={15} />
-                                                </button>
+                                                </Link>
                                                 <button
                                                     type="button"
                                                     onClick={() => remove(exam)}
@@ -196,107 +154,6 @@ export default function Exams({ exams }: { exams: Paginator }) {
                     </div>
                 </div>
             </Card>
-
-            <Modal
-                open={modalOpen}
-                onClose={() => setModalOpen(false)}
-                title={editing ? 'Edit Ujian' : 'Buat Ujian'}
-                footer={
-                    <>
-                        <Button variant="secondary" type="button" onClick={() => setModalOpen(false)}>
-                            Batal
-                        </Button>
-                        <Button type="submit" form="exam-form" disabled={form.processing}>
-                            Simpan
-                        </Button>
-                    </>
-                }
-            >
-                <form id="exam-form" onSubmit={submit} className="space-y-3">
-                    <div>
-                        <Label htmlFor="title">Nama Ujian</Label>
-                        <Input
-                            id="title"
-                            value={form.data.title}
-                            onChange={(event) => form.setData('title', event.target.value)}
-                            placeholder="Matematika Terintegrasi"
-                            required
-                        />
-                        {form.errors.title && <p className="mt-1 text-xs text-rose-600 dark:text-rose-400">{form.errors.title}</p>}
-                    </div>
-
-                    <div>
-                        <Label htmlFor="subject_name">Mata Pelajaran</Label>
-                        <Input
-                            id="subject_name"
-                            value={form.data.subject_name}
-                            onChange={(event) => form.setData('subject_name', event.target.value)}
-                            placeholder="Matematika, Fisika, Kimia"
-                            required
-                        />
-                        {form.errors.subject_name && (
-                            <p className="mt-1 text-xs text-rose-600 dark:text-rose-400">{form.errors.subject_name}</p>
-                        )}
-                    </div>
-
-                    <div className="grid gap-3 sm:grid-cols-2">
-                        <div>
-                            <Label htmlFor="duration_minutes">Durasi (menit)</Label>
-                            <Input
-                                id="duration_minutes"
-                                type="number"
-                                min={1}
-                                max={600}
-                                value={form.data.duration_minutes}
-                                onChange={(event) => form.setData('duration_minutes', Number(event.target.value))}
-                            />
-                        </div>
-                        <div>
-                            <Label htmlFor="passing_grade">KKM</Label>
-                            <Input
-                                id="passing_grade"
-                                type="number"
-                                min={0}
-                                max={100}
-                                value={form.data.passing_grade}
-                                onChange={(event) => form.setData('passing_grade', Number(event.target.value))}
-                            />
-                        </div>
-                    </div>
-
-                    <div>
-                        <Label htmlFor="exam_date">Tanggal & Waktu</Label>
-                        <Input
-                            id="exam_date"
-                            type="datetime-local"
-                            value={form.data.exam_date}
-                            onChange={(event) => form.setData('exam_date', event.target.value)}
-                        />
-                        {form.errors.exam_date && <p className="mt-1 text-xs text-rose-600 dark:text-rose-400">{form.errors.exam_date}</p>}
-                    </div>
-
-                    <div className="space-y-2 text-sm text-slate-700 dark:text-slate-300">
-                        <label className="flex items-center gap-2">
-                            <input
-                                type="checkbox"
-                                checked={form.data.is_active}
-                                onChange={(event) => form.setData('is_active', event.target.checked)}
-                                className="h-4 w-4 rounded border-slate-300 bg-white text-brand-600 focus:ring-brand-500 dark:border-slate-600 dark:bg-slate-950"
-                            />
-                            Aktifkan ujian untuk peserta
-                        </label>
-                        <label className="flex items-center gap-2">
-                            <input
-                                type="checkbox"
-                                checked={form.data.randomize_questions}
-                                onChange={(event) => form.setData('randomize_questions', event.target.checked)}
-                                className="h-4 w-4 rounded border-slate-300 bg-white text-brand-600 focus:ring-brand-500 dark:border-slate-600 dark:bg-slate-950"
-                            />
-                            Acak urutan soal per peserta
-                        </label>
-                    </div>
-                </form>
-            </Modal>
         </AdminLayout>
     );
 }

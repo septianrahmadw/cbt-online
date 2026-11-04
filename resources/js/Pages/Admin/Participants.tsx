@@ -1,8 +1,20 @@
 import { Link, router, useForm } from '@inertiajs/react';
 import { Download, Pencil, Plus, Search, Trash2, Upload } from 'lucide-react';
 import { useState } from 'react';
-import { Alert, Badge, Button, Card, EmptyState, Input, Label, Modal } from '../../components/ui';
+import { Alert, Badge, Button, Card, EmptyState, Input, Label, Modal, Select } from '../../components/ui';
 import { AdminLayout } from '../../layouts/AdminLayout';
+
+interface CategoryOption {
+    id: number;
+    name: string;
+    code: string;
+}
+
+interface ParticipantCategory {
+    id: number;
+    name: string;
+    code: string;
+}
 
 interface Participant {
     id: number;
@@ -10,6 +22,8 @@ interface Participant {
     full_name: string;
     nisn: string | null;
     class_name: string | null;
+    category_id: number | null;
+    category: ParticipantCategory | null;
     is_active: boolean;
     results_count: number;
 }
@@ -26,11 +40,14 @@ interface Paginator {
 export default function Participants({
     participants,
     filters,
+    categories,
 }: {
     participants: Paginator;
-    filters: { search: string };
+    filters: { search: string; category_id: number | null };
+    categories: CategoryOption[];
 }) {
     const [search, setSearch] = useState(filters.search);
+    const [categoryId, setCategoryId] = useState<string>(filters.category_id ? String(filters.category_id) : '');
     const [modalOpen, setModalOpen] = useState(false);
     const [editing, setEditing] = useState<Participant | null>(null);
 
@@ -39,6 +56,7 @@ export default function Participants({
         full_name: '',
         nisn: '',
         class_name: '',
+        category_id: '' as number | '',
         is_active: true,
     });
 
@@ -58,6 +76,7 @@ export default function Participants({
             full_name: participant.full_name,
             nisn: participant.nisn ?? '',
             class_name: participant.class_name ?? '',
+            category_id: participant.category_id ?? '',
             is_active: participant.is_active,
         });
         form.clearErrors();
@@ -90,7 +109,11 @@ export default function Participants({
 
     const runSearch = (event: React.FormEvent) => {
         event.preventDefault();
-        router.get('/admin/participants', { search }, { preserveState: true, replace: true });
+        router.get(
+            '/admin/participants',
+            { search, category_id: categoryId || undefined },
+            { preserveState: true, replace: true },
+        );
     };
 
     const importCsv = (event: React.FormEvent) => {
@@ -136,6 +159,38 @@ export default function Participants({
                             Cari
                         </Button>
                     </form>
+                    <div className="mb-4 flex flex-col gap-2 sm:flex-row sm:items-center">
+                        <label className="text-xs font-medium text-slate-500 dark:text-slate-400" htmlFor="category-filter">
+                            Filter kategori:
+                        </label>
+                        <Select
+                            id="category-filter"
+                            value={categoryId}
+                            onChange={(event) => {
+                                const value = event.target.value;
+                                setCategoryId(value);
+                                router.get(
+                                    '/admin/participants',
+                                    { search, category_id: value || undefined },
+                                    { preserveState: true, replace: true },
+                                );
+                            }}
+                            className="sm:max-w-xs"
+                        >
+                            <option value="">Semua kategori</option>
+                            {categories.map((category) => (
+                                <option key={category.id} value={String(category.id)}>
+                                    {category.name}
+                                </option>
+                            ))}
+                        </Select>
+                        <Link
+                            href="/admin/participant-categories"
+                            className="text-xs font-semibold text-brand-600 hover:text-brand-700 dark:text-brand-300 sm:ml-auto"
+                        >
+                            Kelola kategori →
+                        </Link>
+                    </div>
 
                     {participants.data.length === 0 ? (
                         <EmptyState>Belum ada peserta. Tambahkan manual atau import CSV.</EmptyState>
@@ -147,6 +202,7 @@ export default function Participants({
                                         <th className="pb-2">No Peserta</th>
                                         <th className="pb-2">Nama</th>
                                         <th className="pb-2">Kelas</th>
+                                        <th className="pb-2">Kategori</th>
                                         <th className="pb-2">Status</th>
                                         <th className="pb-2 text-right">Aksi</th>
                                     </tr>
@@ -160,6 +216,13 @@ export default function Participants({
                                                 <p className="text-xs text-slate-500 dark:text-slate-400">{participant.nisn ?? '-'}</p>
                                             </td>
                                             <td className="py-2 text-slate-700 dark:text-slate-300">{participant.class_name ?? '-'}</td>
+                                            <td className="py-2 text-slate-700 dark:text-slate-300">
+                                                {participant.category ? (
+                                                    <Badge tone="blue">{participant.category.name}</Badge>
+                                                ) : (
+                                                    <span className="text-slate-400 dark:text-slate-500">-</span>
+                                                )}
+                                            </td>
                                             <td className="py-2">
                                                 <Badge tone={participant.is_active ? 'green' : 'slate'}>
                                                     {participant.is_active ? 'Aktif' : 'Nonaktif'}
@@ -214,7 +277,7 @@ export default function Participants({
                 <Card className="h-fit">
                     <h2 className="mb-1 text-sm font-semibold text-slate-900 dark:text-white">Import Massal</h2>
                     <p className="mb-3 text-xs text-slate-500 dark:text-slate-400">
-                        Unggah file CSV dengan header: exam_number, full_name, nisn, class_name.
+                        Unggah file CSV dengan header: exam_number, full_name, nisn, class_name, category_code.
                     </p>
                     <form onSubmit={importCsv} className="space-y-3">
                         <input
@@ -284,6 +347,26 @@ export default function Participants({
                                 onChange={(event) => form.setData('class_name', event.target.value)}
                             />
                         </div>
+                    </div>
+                    <div>
+                        <Label htmlFor="category_id">Kategori Peserta</Label>
+                        <Select
+                            id="category_id"
+                            value={form.data.category_id === '' ? '' : String(form.data.category_id)}
+                            onChange={(event) =>
+                                form.setData('category_id', event.target.value === '' ? '' : Number(event.target.value))
+                            }
+                        >
+                            <option value="">Tanpa kategori</option>
+                            {categories.map((category) => (
+                                <option key={category.id} value={String(category.id)}>
+                                    {category.name}
+                                </option>
+                            ))}
+                        </Select>
+                        {form.errors.category_id && (
+                            <p className="mt-1 text-xs text-rose-600 dark:text-rose-400">{form.errors.category_id}</p>
+                        )}
                     </div>
                     <label className="flex items-center gap-2 text-sm text-slate-700 dark:text-slate-300">
                         <input
