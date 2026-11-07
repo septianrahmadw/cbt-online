@@ -18,6 +18,20 @@ class ExamService
 {
     public function start(Exam $exam, Participant $participant, Request $request): ExamSession
     {
+        $windowState = $exam->windowState();
+
+        if ($windowState === 'unscheduled') {
+            throw new RuntimeException('Ujian belum dijadwalkan. Hubungi admin.');
+        }
+
+        if ($windowState === 'not_open') {
+            throw new RuntimeException('Ujian belum dibuka. Ujian mulai pada '.$exam->exam_date?->translatedFormat('d M Y H:i').' WIB.');
+        }
+
+        if ($windowState === 'closed') {
+            throw new RuntimeException('Ujian sudah ditutup sejak '.$exam->exam_end_date?->translatedFormat('d M Y H:i').' WIB.');
+        }
+
         if (ExamResult::where('exam_id', $exam->id)->where('participant_id', $participant->id)->exists()) {
             throw new RuntimeException('Anda sudah mengikuti ujian ini. Hubungi admin untuk mengulang.');
         }
@@ -169,6 +183,9 @@ class ExamService
                 return ['violations' => $session?->violations_count ?? 0, 'forced' => false];
             }
 
+            $session->loadMissing('exam');
+            $violationSettings = $session->exam->effectiveViolationSettings();
+
             ViolationLog::create([
                 'session_id' => $session->id,
                 'type' => $type,
@@ -182,7 +199,7 @@ class ExamService
 
             $forced = false;
 
-            if ($session->violations_count >= 3) {
+            if ($violationSettings['enabled'] && $session->violations_count >= $violationSettings['limit']) {
                 $this->submit($session, true);
                 $forced = true;
             }

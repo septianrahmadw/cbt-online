@@ -122,7 +122,15 @@ export default function Dashboard({
                 </div>
 
                 <div className="card p-6">
-                    <h2 className="mb-4 text-sm font-semibold text-slate-900 dark:text-white">Sesi Ujian Aktif</h2>
+                    <div className="mb-4 flex items-center justify-between">
+                        <h2 className="text-sm font-semibold text-slate-900 dark:text-white">Sesi Ujian Aktif</h2>
+                        <Link
+                            href="/admin/sessions"
+                            className="text-xs font-semibold text-brand-600 hover:text-brand-700 dark:text-brand-300 dark:hover:text-brand-200"
+                        >
+                            Kelola &rarr;
+                        </Link>
+                    </div>
                     {activeSessions.length === 0 ? (
                         <div className="py-8 text-center">
                             <div className="mx-auto mb-3 flex h-12 w-12 items-center justify-center rounded-full bg-slate-100 text-slate-400 dark:bg-slate-800 dark:text-slate-500">

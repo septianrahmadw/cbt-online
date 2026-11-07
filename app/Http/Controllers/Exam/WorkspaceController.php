@@ -62,12 +62,16 @@ class WorkspaceController extends Controller
             ];
         })->values();
 
+        $violationSettings = $session->exam->effectiveViolationSettings();
+
         return Inertia::render('Exam/Workspace', [
             'session' => [
                 'id' => $session->id,
                 'remaining_seconds' => $session->secondsRemaining(),
                 'violations_count' => $session->violations_count,
             ],
+            'violationSettings' => $violationSettings,
+            'examEndsAt' => $session->exam->exam_end_date?->toIso8601String(),
             'exam' => $session->exam->only(['id', 'title', 'subject_name', 'duration_minutes', 'passing_grade']),
             'participant' => $session->participant->only(['id', 'exam_number', 'full_name', 'class_name']),
             'questions' => $questions,

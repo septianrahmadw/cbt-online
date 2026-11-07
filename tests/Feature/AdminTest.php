@@ -3,6 +3,7 @@
 namespace Tests\Feature;
 
 use App\Models\Exam;
+use App\Models\InstitutionSetting;
 use App\Models\Module;
 use App\Models\Question;
 use App\Models\User;
@@ -44,7 +45,8 @@ class AdminTest extends TestCase
             'title' => 'Ujian Contoh',
             'subject_name' => 'Matematika',
             'duration_minutes' => 45,
-            'exam_date' => now()->addDay()->format('Y-m-d\TH:i'),
+            'exam_date' => now()->subHour()->format('Y-m-d\TH:i'),
+            'exam_end_date' => now()->addDay()->format('Y-m-d\TH:i'),
             'is_active' => true,
             'randomize_questions' => false,
             'passing_grade' => 70,
@@ -93,7 +95,8 @@ class AdminTest extends TestCase
             'title' => 'UTBK Sesi 1',
             'subject_name' => 'TPS',
             'duration_minutes' => 60,
-            'exam_date' => now()->addDay(),
+            'exam_date' => now()->subHour(),
+            'exam_end_date' => now()->addDay(),
             'is_active' => true,
             'randomize_questions' => false,
             'passing_grade' => 60,
@@ -156,7 +159,8 @@ class AdminTest extends TestCase
             'title' => 'Ujian Stats',
             'subject_name' => 'Umum',
             'duration_minutes' => 30,
-            'exam_date' => now()->addDay(),
+            'exam_date' => now()->subHour(),
+            'exam_end_date' => now()->addDay(),
             'is_active' => true,
             'randomize_questions' => false,
             'passing_grade' => 60,
@@ -202,7 +206,8 @@ class AdminTest extends TestCase
             'title' => 'Ujian Endpoint Import',
             'subject_name' => 'Campuran',
             'duration_minutes' => 45,
-            'exam_date' => now()->addDay(),
+            'exam_date' => now()->subHour(),
+            'exam_end_date' => now()->addDay(),
             'is_active' => true,
             'randomize_questions' => false,
             'passing_grade' => 60,
@@ -226,5 +231,52 @@ class AdminTest extends TestCase
             'question_text' => 'Ibu kota Indonesia saat ini?',
             'difficulty' => 'mudah',
         ]);
+    }
+
+    public function test_admin_can_update_violation_settings(): void
+    {
+        $this->actingAs(User::factory()->create());
+
+        $this->post('/admin/settings', [
+            'school_name' => 'SMK Contoh',
+            'academic_year' => '2026/2027',
+            'exam_event_name' => 'Ujian 2026',
+            'passing_grade_default' => 75,
+            'violations_enabled' => false,
+            'violation_limit' => 5,
+        ])->assertRedirect();
+
+        $settings = InstitutionSetting::current();
+
+        $this->assertFalse($settings->violations_enabled);
+        $this->assertSame(5, $settings->violation_limit);
+    }
+
+    public function test_admin_exam_requires_schedule_window(): void
+    {
+        $this->actingAs(User::factory()->create());
+
+        $this->from('/admin/exams/create')->post('/admin/exams', [
+            'title' => 'Ujian Tanpa Jadwal',
+            'subject_name' => 'Matematika',
+            'duration_minutes' => 45,
+            'is_active' => true,
+            'passing_grade' => 70,
+        ])->assertSessionHasErrors(['exam_date', 'exam_end_date']);
+    }
+
+    public function test_admin_exam_end_date_must_not_precede_start(): void
+    {
+        $this->actingAs(User::factory()->create());
+
+        $this->from('/admin/exams/create')->post('/admin/exams', [
+            'title' => 'Ujian Jadwal Terbalik',
+            'subject_name' => 'Matematika',
+            'duration_minutes' => 45,
+            'exam_date' => now()->addDay()->format('Y-m-d\TH:i'),
+            'exam_end_date' => now()->subDay()->format('Y-m-d\TH:i'),
+            'is_active' => true,
+            'passing_grade' => 70,
+        ])->assertSessionHasErrors('exam_end_date');
     }
 }

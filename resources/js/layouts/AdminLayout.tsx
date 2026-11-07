@@ -1,5 +1,6 @@
 import { Link, router, usePage } from '@inertiajs/react';
 import {
+    Activity,
     BarChart3,
     BookOpen,
     ClipboardList,
@@ -27,6 +28,7 @@ const navigation = [
     { href: '/admin/questions', label: 'Bank Soal', icon: BookOpen, exact: false },
     { href: '/admin/modules', label: 'Modul Soal', icon: ClipboardList, exact: false },
     { href: '/admin/results', label: 'Nilai & Rekap', icon: BarChart3, exact: false },
+    { href: '/admin/sessions', label: 'Sesi Berjalan', icon: Activity, exact: false },
     { href: '/admin/settings', label: 'Pengaturan', icon: Settings, exact: false },
 ];
 

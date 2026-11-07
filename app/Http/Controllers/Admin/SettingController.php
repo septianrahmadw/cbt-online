@@ -25,6 +25,8 @@ class SettingController extends Controller
             'academic_year' => ['nullable', 'string', 'max:20'],
             'exam_event_name' => ['nullable', 'string', 'max:255'],
             'passing_grade_default' => ['required', 'integer', 'min:0', 'max:100'],
+            'violations_enabled' => ['boolean'],
+            'violation_limit' => ['required', 'integer', 'min:1', 'max:10'],
             'logo' => ['nullable', 'image', 'max:2048'],
         ]);
 
@@ -35,6 +37,8 @@ class SettingController extends Controller
         }
 
         unset($data['logo']);
+
+        $data['violations_enabled'] = (bool) ($data['violations_enabled'] ?? false);
 
         $settings->update($data);
 

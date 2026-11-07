@@ -1,7 +1,7 @@
 import { Link, useForm } from '@inertiajs/react';
 import { ArrowLeft, Save } from 'lucide-react';
 import { AdminLayout } from '../../../layouts/AdminLayout';
-import { Button, Card, Input, Label } from '../../../components/ui';
+import { Button, Card, Input, Label, Select } from '../../../components/ui';
 
 interface ExamCategoryOption {
     id: number;
@@ -16,7 +16,10 @@ interface ExamData {
     subject_name: string;
     duration_minutes: number;
     exam_date: string | null;
+    exam_end_date: string | null;
     is_active: boolean;
+    violations_enabled: boolean | null;
+    violation_limit: number | null;
     randomize_questions: boolean;
     passing_grade: number;
     category_ids: number[];
@@ -34,7 +37,15 @@ export default function ExamForm({
         subject_name: exam?.subject_name ?? '',
         duration_minutes: exam?.duration_minutes ?? 60,
         exam_date: exam?.exam_date ?? '',
+        exam_end_date: exam?.exam_end_date ?? '',
         is_active: exam?.is_active ?? true,
+        violation_setting:
+            exam?.violations_enabled === null || exam?.violations_enabled === undefined
+                ? 'global'
+                : exam.violations_enabled
+                  ? 'enabled'
+                  : 'disabled',
+        violation_limit: exam?.violation_limit ?? null,
         randomize_questions: exam?.randomize_questions ?? true,
         passing_grade: exam?.passing_grade ?? 70,
         category_ids: (exam?.category_ids ?? []) as number[],
@@ -143,17 +154,83 @@ export default function ExamForm({
                         </div>
                     </div>
 
-                    <div>
-                        <Label htmlFor="exam_date">Tanggal & Waktu</Label>
-                        <Input
-                            id="exam_date"
-                            type="datetime-local"
-                            value={form.data.exam_date}
-                            onChange={(event) => form.setData('exam_date', event.target.value)}
-                        />
-                        {form.errors.exam_date && (
-                            <p className="mt-1 text-xs text-rose-600 dark:text-rose-400">{form.errors.exam_date}</p>
-                        )}
+                    <div className="grid gap-4 sm:grid-cols-2">
+                        <div>
+                            <Label htmlFor="exam_date">
+                                Tanggal & Waktu Mulai <span className="text-rose-500">*</span>
+                            </Label>
+                            <Input
+                                id="exam_date"
+                                type="datetime-local"
+                                value={form.data.exam_date}
+                                onChange={(event) => form.setData('exam_date', event.target.value)}
+                                required
+                            />
+                            {form.errors.exam_date && (
+                                <p className="mt-1 text-xs text-rose-600 dark:text-rose-400">{form.errors.exam_date}</p>
+                            )}
+                        </div>
+                        <div>
+                            <Label htmlFor="exam_end_date">
+                                Tanggal & Waktu Selesai <span className="text-rose-500">*</span>
+                            </Label>
+                            <Input
+                                id="exam_end_date"
+                                type="datetime-local"
+                                value={form.data.exam_end_date}
+                                onChange={(event) => form.setData('exam_end_date', event.target.value)}
+                                required
+                            />
+                            {form.errors.exam_end_date && (
+                                <p className="mt-1 text-xs text-rose-600 dark:text-rose-400">{form.errors.exam_end_date}</p>
+                            )}
+                        </div>
+                    </div>
+                    <p className="-mt-2 text-xs text-slate-500 dark:text-slate-400">
+                        Ujian hanya bisa diakses dalam rentang waktu ini. Saat waktu selesai tercapai, sesi yang
+                        sedang berjalan dipaksa submit otomatis.
+                    </p>
+
+                    <div className="rounded-xl border border-slate-200 p-4 dark:border-slate-800">
+                        <h3 className="text-sm font-semibold text-slate-900 dark:text-white">Pelanggaran</h3>
+                        <p className="mt-1 text-xs text-slate-500 dark:text-slate-400">
+                            Kosongkan untuk mengikuti Pengaturan Lembaga. Jika dinonaktifkan, pelanggaran tetap
+                            dicatat tetapi tidak ada paksa submit otomatis.
+                        </p>
+                        <div className="mt-3 grid gap-4 sm:grid-cols-2">
+                            <div>
+                                <Label htmlFor="violation_setting">Batas Pelanggaran</Label>
+                                <Select
+                                    id="violation_setting"
+                                    value={form.data.violation_setting}
+                                    onChange={(event) => form.setData('violation_setting', event.target.value as 'global' | 'enabled' | 'disabled')}
+                                >
+                                    <option value="global">Ikut pengaturan global</option>
+                                    <option value="enabled">Aktif (paksa submit)</option>
+                                    <option value="disabled">Nonaktif (hanya dicatat)</option>
+                                </Select>
+                                {form.errors.violation_setting && (
+                                    <p className="mt-1 text-xs text-rose-600 dark:text-rose-400">{form.errors.violation_setting}</p>
+                                )}
+                            </div>
+                            <div>
+                                <Label htmlFor="violation_limit">Maks. Pelanggaran (opsional)</Label>
+                                <Input
+                                    id="violation_limit"
+                                    type="number"
+                                    min={1}
+                                    max={10}
+                                    placeholder="Ikut global"
+                                    value={form.data.violation_limit ?? ''}
+                                    onChange={(event) =>
+                                        form.setData('violation_limit', event.target.value === '' ? null : Number(event.target.value))
+                                    }
+                                />
+                                {form.errors.violation_limit && (
+                                    <p className="mt-1 text-xs text-rose-600 dark:text-rose-400">{form.errors.violation_limit}</p>
+                                )}
+                            </div>
+                        </div>
                     </div>
 
                     <div>

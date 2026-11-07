@@ -1,32 +1,79 @@
 import { Link, useForm, usePage } from '@inertiajs/react';
-import { AlertCircle, BookOpen, Hash, Loader2, LogIn, User } from 'lucide-react';
-import { Alert, Button, Input, Label, Select } from '../../components/ui';
+import { AlertCircle, BookOpen, CheckCircle2, Hash, Loader2, LogIn, User } from 'lucide-react';
+import { useEffect, useState } from 'react';
+import { Alert, Button, Input, Label } from '../../components/ui';
 import { ExamLayout } from '../../layouts/ExamLayout';
+import { csrfToken } from '../../lib/utils';
 import type { SharedProps } from '../../types/shared';
 
-interface ExamOption {
-    id: number;
-    title: string;
-    subject_name: string;
-    duration_minutes: number;
-    total_questions: number;
-    questions_count: number;
-}
+type NumberStatus = 'idle' | 'checking' | 'registered' | 'not_registered' | 'error';
 
-export default function ExamLogin({ exams }: { exams: ExamOption[] }) {
+export default function ExamLogin() {
     const { institution } = usePage<SharedProps>().props;
     const { data, setData, post, processing, errors } = useForm({
-        exam_id: exams[0]?.id ?? '',
         exam_number: '',
         full_name: '',
     });
+    const [numberStatus, setNumberStatus] = useState<NumberStatus>('idle');
+
+    useEffect(() => {
+        const examNumber = data.exam_number.trim();
+
+        if (examNumber.length < 3) {
+            setNumberStatus('idle');
+            return;
+        }
+
+        setNumberStatus('idle');
+        const controller = new AbortController();
+        const timer = window.setTimeout(async () => {
+            setNumberStatus('checking');
+
+            try {
+                const response = await fetch('/exam/check-number', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                        Accept: 'application/json',
+                        'X-CSRF-TOKEN': csrfToken(),
+                    },
+                    body: JSON.stringify({ exam_number: examNumber }),
+                    signal: controller.signal,
+                });
+
+                if (!response.ok) {
+                    setNumberStatus('error');
+                    return;
+                }
+
+                const payload = (await response.json()) as { registered?: boolean };
+                setNumberStatus(payload.registered ? 'registered' : 'not_registered');
+            } catch (error) {
+                if ((error as Error).name === 'AbortError') {
+                    return;
+                }
+
+                setNumberStatus('error');
+            }
+        }, 400);
+
+        return () => {
+            window.clearTimeout(timer);
+            controller.abort();
+        };
+    }, [data.exam_number]);
+
+    const canSubmit = numberStatus === 'registered' && data.full_name.trim() !== '' && !processing;
 
     const submit = (event: React.FormEvent) => {
         event.preventDefault();
+
+        if (!canSubmit) {
+            return;
+        }
+
         post('/exam/login');
     };
-
-    const selectedExam = exams.find((exam) => exam.id === data.exam_id);
 
     return (
         <ExamLayout>
@@ -50,29 +97,6 @@ export default function ExamLogin({ exams }: { exams: ExamOption[] }) {
                         </Alert>
                     )}
                     {errors.full_name && <Alert tone="error">{errors.full_name}</Alert>}
-                    {errors.exam_id && <Alert tone="error">{errors.exam_id}</Alert>}
-
-                    <div>
-                        <Label htmlFor="exam_id">Pilih Ujian</Label>
-                        <Select
-                            id="exam_id"
-                            value={data.exam_id}
-                            onChange={(event) => setData('exam_id', Number(event.target.value))}
-                        >
-                            {exams.length === 0 && <option value="">Belum ada ujian aktif</option>}
-                            {exams.map((exam) => (
-                                <option key={exam.id} value={exam.id}>
-                                    {exam.title} — {exam.subject_name} ({exam.questions_count} soal,{' '}
-                                    {exam.duration_minutes} menit)
-                                </option>
-                            ))}
-                        </Select>
-                        {selectedExam && (
-                            <p className="mt-2 text-xs text-slate-500 dark:text-slate-400">
-                                {selectedExam.questions_count} soal &middot; {selectedExam.duration_minutes} menit
-                            </p>
-                        )}
-                    </div>
 
                     <div>
                         <Label htmlFor="exam_number">Nomor Peserta</Label>
@@ -89,6 +113,33 @@ export default function ExamLogin({ exams }: { exams: ExamOption[] }) {
                                 className="pl-11"
                                 required
                             />
+                        </div>
+
+                        <div className="mt-2 min-h-5">
+                            {numberStatus === 'checking' && (
+                                <p className="flex items-center gap-1.5 text-xs text-slate-500 dark:text-slate-400">
+                                    <Loader2 size={13} className="animate-spin" /> Memeriksa nomor peserta...
+                                </p>
+                            )}
+                            {numberStatus === 'registered' && (
+                                <Alert tone="success">
+                                    <span className="flex items-center gap-2">
+                                        <CheckCircle2 size={16} /> Anda Terdaftar Ujian
+                                    </span>
+                                </Alert>
+                            )}
+                            {numberStatus === 'not_registered' && (
+                                <Alert tone="error">
+                                    <span className="flex items-center gap-2">
+                                        <AlertCircle size={16} /> Anda Tidak Terdaftar / Nomor Ujian Salah
+                                    </span>
+                                </Alert>
+                            )}
+                            {numberStatus === 'error' && (
+                                <Alert tone="info">
+                                    Gagal memeriksa nomor peserta. Periksa koneksi lalu coba lagi.
+                                </Alert>
+                            )}
                         </div>
                     </div>
 
@@ -110,24 +161,24 @@ export default function ExamLogin({ exams }: { exams: ExamOption[] }) {
                         </div>
                     </div>
 
-                    <Button type="submit" className="w-full py-3" disabled={processing || exams.length === 0}>
+                    <Button type="submit" className="w-full py-3" disabled={!canSubmit}>
                         {processing ? <Loader2 size={16} className="animate-spin" /> : <LogIn size={16} />}
-                        {processing ? 'Memeriksa data...' : 'Mulai Ujian'}
+                        {processing ? 'Memeriksa data...' : 'Lanjutkan'}
                     </Button>
+
+                    <p className="text-center text-xs text-slate-500 dark:text-slate-400">
+                        Setelah nomor dan nama terverifikasi, daftar ujian yang tersedia untuk Anda akan ditampilkan.
+                    </p>
 
                     <p className="text-center text-xs text-slate-500 dark:text-slate-400">
                         <Link
                             href="/admin/login"
-                            className="font-medium text-brand-600 hover:text-brand-700 dark:text-brand-300 dark:hover:text-brand-200"
+                            className="font-medium text-brand-600 hover:text-brand-700 dark:text-brand-300"
                         >
-                            Login admin / proktor
+                            Masuk sebagai admin
                         </Link>
                     </p>
                 </form>
-
-                <p className="mt-4 text-center text-xs text-slate-500 dark:text-slate-400">
-                    Pastikan data nomor peserta dan nama sesuai. Hubungi proktor jika mengalami kendala.
-                </p>
             </div>
         </ExamLayout>
     );

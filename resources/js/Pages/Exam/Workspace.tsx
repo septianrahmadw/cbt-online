@@ -35,10 +35,12 @@ interface Question {
 
 interface WorkspaceProps {
     session: { id: number; remaining_seconds: number; violations_count: number };
+    violationSettings: { enabled: boolean; limit: number };
     exam: { id: number; title: string; subject_name: string; duration_minutes: number; passing_grade: number };
     participant: { id: number; exam_number: string; full_name: string; class_name: string | null };
     questions: Question[];
     serverTime: string;
+    examEndsAt?: string | null;
 }
 
 interface ViolationState {
@@ -48,7 +50,15 @@ interface ViolationState {
     message: string;
 }
 
-export default function Workspace({ session, exam, participant, questions: initialQuestions }: WorkspaceProps) {
+export default function Workspace({
+    session,
+    violationSettings,
+    exam,
+    participant,
+    questions: initialQuestions,
+    examEndsAt,
+}: WorkspaceProps) {
+    const violationLimit = violationSettings.limit;
     const { institution } = usePage<SharedProps>().props;
     const storageKey = `cbt_answers_${session.id}`;
 
@@ -71,6 +81,11 @@ export default function Workspace({ session, exam, participant, questions: initi
 
     questionsRef.current = questions;
     submittingRef.current = submitting;
+
+    const secondsToWindowEnd = examEndsAt
+        ? Math.max(0, Math.floor((new Date(examEndsAt).getTime() - Date.now()) / 1000))
+        : Number.POSITIVE_INFINITY;
+    const countdownSeconds = Math.min(session.remaining_seconds, secondsToWindowEnd);
 
     const current = questions[currentIndex];
     const answeredCount = useMemo(
@@ -163,6 +178,16 @@ export default function Workspace({ session, exam, participant, questions: initi
             },
             body: JSON.stringify(body),
         });
+
+        if (response.status === 409) {
+            const data = (await response.json().catch(() => null)) as { redirect?: string } | null;
+
+            if (data?.redirect) {
+                window.location.href = data.redirect;
+            }
+
+            throw new Error('Sesi ujian telah berakhir');
+        }
 
         if (!response.ok) {
             throw new Error(`Request gagal (${response.status})`);
@@ -281,7 +306,7 @@ export default function Workspace({ session, exam, participant, questions: initi
                 forced: false,
                 count: data.violations,
                 message:
-                    data.violations >= 2
+                    violationSettings.enabled && data.violations >= violationLimit - 1
                         ? 'Peringatan terakhir! Jika Anda meninggalkan halaman ujian sekali lagi, ujian akan dihentikan otomatis.'
                         : 'Sistem mendeteksi Anda meninggalkan halaman ujian. Kembali ke mode layar penuh dan fokus pada ujian.',
             });
@@ -338,7 +363,7 @@ export default function Workspace({ session, exam, participant, questions: initi
                         )}
                         <div className="text-right">
                             <p className="text-[11px] uppercase tracking-wide text-slate-500 dark:text-slate-400">Sisa waktu</p>
-                            <CountdownTimer initialSeconds={session.remaining_seconds} onExpire={submitExam} />
+                            <CountdownTimer initialSeconds={countdownSeconds} onExpire={submitExam} />
                         </div>
                         <ThemeToggle />
                         <Button variant="danger" onClick={() => setSubmitOpen(true)} disabled={submitting}>
@@ -483,7 +508,10 @@ export default function Workspace({ session, exam, participant, questions: initi
                         <h2 className="text-xl font-semibold text-slate-900 dark:text-white">Siap memulai ujian?</h2>
                         <p className="mt-2 text-sm text-slate-500 dark:text-slate-400">
                             Ujian akan berjalan dalam mode layar penuh. Sistem memantau perpindahan tab dan
-                            pelanggaran lainnya. Tiga pelanggaran menyebabkan ujian dihentikan otomatis.
+                            pelanggaran lainnya.{' '}
+                            {violationSettings.enabled
+                                ? `${violationLimit} pelanggaran menyebabkan ujian dihentikan otomatis.`
+                                : 'Pelanggaran tetap dicatat oleh sistem.'}
                         </p>
                         <div className="mt-5 rounded-xl border border-slate-200 bg-slate-50 p-3 text-left text-xs text-slate-500 dark:border-slate-800 dark:bg-slate-950 dark:text-slate-400">
                             <p className="font-medium text-slate-900 dark:text-white">{exam.title}</p>
@@ -519,7 +547,10 @@ export default function Workspace({ session, exam, participant, questions: initi
                         <span>{violation.message}</span>
                     </p>
                     <p className="text-xs text-slate-500 dark:text-slate-400">
-                        Pelanggaran tercatat: {violation.count}. Toleransi maksimal 2 peringatan.
+                        Pelanggaran tercatat: {violation.count}.{' '}
+                        {violationSettings.enabled
+                            ? `Toleransi maksimal ${violationLimit} pelanggaran.`
+                            : 'Pelanggaran tetap dicatat, ujian tidak dihentikan otomatis.'}
                     </p>
                 </div>
             </Modal>

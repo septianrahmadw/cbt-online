@@ -8,6 +8,7 @@ use App\Http\Controllers\Admin\ParticipantCategoryController;
 use App\Http\Controllers\Admin\ParticipantController;
 use App\Http\Controllers\Admin\QuestionController;
 use App\Http\Controllers\Admin\ResultController;
+use App\Http\Controllers\Admin\SessionController;
 use App\Http\Controllers\Admin\SettingController;
 use App\Http\Controllers\Exam\AuthController as ExamAuthController;
 use App\Http\Controllers\Exam\ResultController as ExamResultController;
@@ -52,13 +53,23 @@ Route::prefix('admin')->name('admin.')->group(function () {
         Route::get('results/export', [ResultController::class, 'export'])->name('results.export');
         Route::get('results/print', [ResultController::class, 'print'])->name('results.print');
         Route::post('reset', [ResultController::class, 'reset'])->name('reset');
+
+        Route::get('sessions', [SessionController::class, 'index'])->name('sessions.index');
+        Route::post('sessions/stop-all', [SessionController::class, 'stopAll'])->name('sessions.stop-all');
+        Route::post('sessions/{examSession}/stop', [SessionController::class, 'stop'])->name('sessions.stop');
     });
 });
 
 Route::prefix('exam')->name('exam.')->group(function () {
     Route::get('login', [ExamAuthController::class, 'create'])->name('login');
     Route::post('login', [ExamAuthController::class, 'store'])->name('login.store');
+    Route::post('check-number', [ExamAuthController::class, 'checkNumber'])
+        ->middleware('throttle:30,1')
+        ->name('check-number');
     Route::post('logout', [ExamAuthController::class, 'destroy'])->name('logout');
+    Route::get('confirm', [ExamAuthController::class, 'confirm'])->name('confirm');
+    Route::post('confirm/reset', [ExamAuthController::class, 'resetLookup'])->name('confirm.reset');
+    Route::post('start', [ExamAuthController::class, 'start'])->name('start');
     Route::get('result', [ExamResultController::class, 'show'])->name('result');
 
     Route::middleware('participant')->group(function () {

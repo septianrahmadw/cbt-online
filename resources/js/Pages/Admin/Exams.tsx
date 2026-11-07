@@ -15,6 +15,7 @@ interface Exam {
     subject_name: string;
     duration_minutes: number;
     exam_date: string | null;
+    exam_end_date: string | null;
     is_active: boolean;
     randomize_questions: boolean;
     passing_grade: number;
@@ -76,8 +77,8 @@ export default function Exams({ exams }: { exams: Paginator }) {
                                             <p className="font-medium text-slate-900 dark:text-white">{exam.title}</p>
                                             <p className="text-xs text-slate-500 dark:text-slate-400">{exam.subject_name}</p>
                                             <p className="text-xs text-slate-500 dark:text-slate-500">
-                                                {exam.exam_date
-                                                    ? new Date(exam.exam_date).toLocaleString('id-ID')
+                                                {exam.exam_date && exam.exam_end_date
+                                                    ? `${new Date(exam.exam_date).toLocaleString('id-ID')} s/d ${new Date(exam.exam_end_date).toLocaleString('id-ID')}`
                                                     : 'Jadwal belum ditentukan'}
                                             </p>
                                         </td>

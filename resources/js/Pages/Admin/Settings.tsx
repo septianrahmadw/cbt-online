@@ -11,6 +11,8 @@ interface Settings {
     academic_year: string | null;
     exam_event_name: string | null;
     passing_grade_default: number;
+    violations_enabled: boolean;
+    violation_limit: number;
 }
 
 export default function SettingsPage({ settings }: { settings: Settings }) {
@@ -20,6 +22,8 @@ export default function SettingsPage({ settings }: { settings: Settings }) {
         academic_year: settings.academic_year ?? '',
         exam_event_name: settings.exam_event_name ?? '',
         passing_grade_default: settings.passing_grade_default,
+        violations_enabled: settings.violations_enabled,
+        violation_limit: settings.violation_limit,
         logo: null as File | null,
     });
 
@@ -75,6 +79,40 @@ export default function SettingsPage({ settings }: { settings: Settings }) {
                             onChange={(event) => setData('exam_event_name', event.target.value)}
                             placeholder="Ujian Tertulis Berbasis Komputer 2026"
                         />
+                    </div>
+
+                    <div className="rounded-xl border border-slate-200 p-4 dark:border-slate-800">
+                        <h3 className="text-sm font-semibold text-slate-900 dark:text-white">Pengaturan Pelanggaran</h3>
+                        <p className="mt-1 text-xs text-slate-500 dark:text-slate-400">
+                            Berlaku sebagai default untuk semua ujian. Bisa dioverride per ujian di halaman Daftar Ujian.
+                            Jika dinonaktifkan, pelanggaran tetap dicatat di log tetapi tidak ada paksa submit otomatis.
+                        </p>
+                        <div className="mt-3 flex items-start justify-between gap-4">
+                            <label htmlFor="violations_enabled" className="cursor-pointer text-sm font-medium text-slate-700 dark:text-slate-200">
+                                Batas pelanggaran aktif (paksa submit otomatis)
+                            </label>
+                            <input
+                                id="violations_enabled"
+                                type="checkbox"
+                                checked={data.violations_enabled}
+                                onChange={(event) => setData('violations_enabled', event.target.checked)}
+                                className="mt-0.5 h-5 w-5 accent-brand-600"
+                            />
+                        </div>
+                        <div className="mt-3">
+                            <Label htmlFor="violation_limit">Jumlah Maksimal Pelanggaran</Label>
+                            <Input
+                                id="violation_limit"
+                                type="number"
+                                min={1}
+                                max={10}
+                                value={data.violation_limit}
+                                onChange={(event) => setData('violation_limit', Number(event.target.value))}
+                            />
+                            {errors.violation_limit && (
+                                <p className="mt-1 text-xs text-rose-600 dark:text-rose-400">{errors.violation_limit}</p>
+                            )}
+                        </div>
                     </div>
 
                     <div>

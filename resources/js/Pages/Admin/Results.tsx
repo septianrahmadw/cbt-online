@@ -1,4 +1,4 @@
-import { router, useForm } from '@inertiajs/react';
+import { Link, router, useForm } from '@inertiajs/react';
 import { Download, Printer, RotateCcw, Users } from 'lucide-react';
 import { useState } from 'react';
 import { Alert, Badge, Button, Card, EmptyState, Select } from '../../components/ui';
@@ -24,7 +24,7 @@ interface ResultRow {
 interface ActiveSession {
     id: number;
     start_time: string | null;
-    violation_count: number;
+    violations_count: number;
     participant: { exam_number: string; full_name: string } | null;
     exam: { title: string } | null;
 }
@@ -136,48 +136,27 @@ export default function Results({
             <div className="grid gap-4 xl:grid-cols-[1fr_340px]">
                 <div className="space-y-4">
                     <Card>
-                        <h2 className="mb-3 flex items-center gap-2 text-sm font-semibold text-slate-900 dark:text-white">
-                            <Users size={16} /> Sesi Berjalan ({activeSessions.length})
-                        </h2>
-                        {activeSessions.length === 0 ? (
-                            <EmptyState>Tidak ada peserta yang sedang mengerjakan ujian.</EmptyState>
-                        ) : (
-                            <div className="overflow-x-auto">
-                                <table className="w-full text-sm">
-                                    <thead>
-                                        <tr className="text-left text-xs uppercase tracking-wide text-slate-500 dark:text-slate-400">
-                                            <th className="pb-2">Peserta</th>
-                                            <th className="pb-2">Mulai</th>
-                                            <th className="pb-2 text-right">Pelanggaran</th>
-                                        </tr>
-                                    </thead>
-                                    <tbody className="divide-y divide-slate-100 dark:divide-slate-800">
-                                        {activeSessions.map((session) => (
-                                            <tr key={session.id}>
-                                                <td className="py-2">
-                                                    <p className="font-medium text-slate-900 dark:text-white">
-                                                        {session.participant?.full_name}
-                                                    </p>
-                                                    <p className="text-xs text-slate-500 dark:text-slate-400">
-                                                        {session.participant?.exam_number}
-                                                    </p>
-                                                </td>
-                                                <td className="py-2 text-slate-700 dark:text-slate-300">
-                                                    {session.start_time
-                                                        ? new Date(session.start_time).toLocaleTimeString('id-ID')
-                                                        : '-'}
-                                                </td>
-                                                <td className="py-2 text-right">
-                                                    <Badge tone={session.violation_count > 0 ? 'red' : 'slate'}>
-                                                        {session.violation_count}x
-                                                    </Badge>
-                                                </td>
-                                            </tr>
-                                        ))}
-                                    </tbody>
-                                </table>
+                        <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+                            <div className="flex items-center gap-3">
+                                <span className="flex h-10 w-10 items-center justify-center rounded-xl bg-brand-50 text-brand-600 dark:bg-brand-500/10 dark:text-brand-300">
+                                    <Users size={20} />
+                                </span>
+                                <div>
+                                    <h2 className="text-sm font-semibold text-slate-900 dark:text-white">
+                                        Sesi Berjalan: {activeSessions.length}
+                                    </h2>
+                                    <p className="text-xs text-slate-500 dark:text-slate-400">
+                                        Monitoring &amp; penghentian sesi dilakukan di halaman Sesi Berjalan.
+                                    </p>
+                                </div>
                             </div>
-                        )}
+                            <Link
+                                href="/admin/sessions"
+                                className="inline-flex h-10 items-center gap-2 rounded-xl border border-slate-200 bg-white px-3 text-sm font-semibold text-slate-700 shadow-sm hover:bg-slate-50 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-200 dark:hover:bg-slate-800"
+                            >
+                                Buka Sesi Berjalan &rarr;
+                            </Link>
+                        </div>
                     </Card>
 
                     <Card>
