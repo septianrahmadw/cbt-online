@@ -5,6 +5,7 @@ namespace App\Models;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
+use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\BelongsToMany;
 use Illuminate\Database\Eloquent\Relations\HasMany;
 
@@ -24,6 +25,7 @@ class Exam extends Model
         'randomize_questions',
         'passing_grade',
         'total_questions',
+        'created_by',
     ];
 
     protected $casts = [
@@ -90,6 +92,25 @@ class Exam extends Model
                     ->where('participant_categories.id', $participant->category_id)));
     }
 
+    /**
+     * @return Builder<Exam>
+     */
+    public function scopeVisibleTo(Builder $query, User $user): Builder
+    {
+        if ($user->isAdmin()) {
+            return $query;
+        }
+
+        return $query->whereHas('assignedUsers', fn (Builder $query) => $query
+            ->where('users.id', $user->id));
+    }
+
+    public function isVisibleTo(User $user): bool
+    {
+        return $user->isAdmin()
+            || $this->assignedUsers()->where('users.id', $user->id)->exists();
+    }
+
     public function questions(): HasMany
     {
         return $this->hasMany(Question::class)->orderBy('question_number');
@@ -108,5 +129,17 @@ class Exam extends Model
     public function participantCategories(): BelongsToMany
     {
         return $this->belongsToMany(ParticipantCategory::class)->withTimestamps();
+    }
+
+    public function assignedUsers(): BelongsToMany
+    {
+        return $this->belongsToMany(User::class, 'exam_assignments')
+            ->withPivot('assigned_by')
+            ->withTimestamps();
+    }
+
+    public function creator(): BelongsTo
+    {
+        return $this->belongsTo(User::class, 'created_by');
     }
 }

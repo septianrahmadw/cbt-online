@@ -7,6 +7,7 @@ use App\Models\Exam;
 use App\Models\Module;
 use App\Models\Question;
 use App\Models\QuestionOption;
+use App\QuestionReviewStatus;
 use App\Services\QuestionImportService;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
@@ -21,8 +22,18 @@ class QuestionController extends Controller
 {
     public function index(Request $request): Response
     {
-        $exams = Exam::orderBy('title')->get(['id', 'title', 'subject_name', 'total_questions']);
+        $this->authorize('viewAny', Question::class);
+
+        $exams = Exam::visibleTo($request->user())
+            ->orderBy('title')
+            ->get(['id', 'title', 'subject_name', 'total_questions']);
         $selectedExamId = $request->integer('exam_id') ?: $exams->first()?->id;
+        $selectedExam = $selectedExamId ? $exams->firstWhere('id', $selectedExamId) : null;
+
+        if ($selectedExamId && ! $selectedExam) {
+            abort(403, 'Anda tidak memiliki akses ke ujian ini.');
+        }
+
         $modules = $this->moduleOptions();
         $selectedModuleId = $request->input('module_id');
 
@@ -49,6 +60,12 @@ class QuestionController extends Controller
                     'explanation' => $question->explanation,
                     'is_active' => (bool) $question->is_active,
                     'score_weight' => (float) $question->score_weight,
+                    'review_status' => $question->review_status?->value,
+                    'review_status_label' => $question->review_status?->label(),
+                    'review_note' => $question->review_note,
+                    'can_edit' => $request->user()->can('update', $question),
+                    'can_submit_review' => $request->user()->can('submitForReview', $question),
+                    'can_review' => $request->user()->can('review', $question),
                     'module' => $question->module ? [
                         'id' => $question->module->id,
                         'name' => $question->module->name,
@@ -65,8 +82,6 @@ class QuestionController extends Controller
                 ])
             : collect();
 
-        $selectedExam = $exams->firstWhere('id', $selectedExamId);
-
         return Inertia::render('Admin/Questions', [
             'exams' => $exams,
             'selectedExam' => $selectedExam,
@@ -79,8 +94,15 @@ class QuestionController extends Controller
 
     public function create(Request $request): Response
     {
-        $exams = Exam::orderBy('title')->get(['id', 'title', 'subject_name']);
+        $this->authorize('create', Question::class);
+
+        $exams = Exam::visibleTo($request->user())->orderBy('title')->get(['id', 'title', 'subject_name']);
         $selectedExamId = $request->integer('exam_id') ?: $exams->first()?->id;
+
+        if ($selectedExamId && ! $exams->firstWhere('id', $selectedExamId)) {
+            abort(403, 'Anda tidak memiliki akses ke ujian ini.');
+        }
+
         $nextQuestionNumber = $selectedExamId
             ? (int) Question::where('exam_id', $selectedExamId)->max('question_number') + 1
             : 1;
@@ -97,7 +119,13 @@ class QuestionController extends Controller
 
     public function store(Request $request): RedirectResponse
     {
+        $this->authorize('create', Question::class);
+
         $data = $this->validated($request);
+        $exam = Exam::findOrFail($data['exam_id']);
+        $this->authorize('manageQuestions', $exam);
+
+        $isDosen = $request->user()->isDosen();
 
         $question = Question::create([
             'exam_id' => $data['exam_id'],
@@ -111,6 +139,10 @@ class QuestionController extends Controller
             'explanation' => $data['explanation'] ?? null,
             'is_active' => (bool) ($request->input('is_active', true)),
             'score_weight' => $data['score_weight'],
+            'review_status' => $isDosen ? QuestionReviewStatus::Draft : QuestionReviewStatus::Approved,
+            'reviewed_by' => $isDosen ? null : $request->user()->id,
+            'reviewed_at' => $isDosen ? null : now(),
+            'created_by' => $request->user()->id,
         ]);
 
         $this->saveOptions($question, $request);
@@ -118,15 +150,19 @@ class QuestionController extends Controller
 
         return redirect()
             ->route('admin.questions.index', ['exam_id' => $question->exam_id])
-            ->with('success', 'Soal berhasil ditambahkan.');
+            ->with('success', $isDosen
+                ? 'Soal berhasil disimpan sebagai draf. Kirim ke admin untuk direview.'
+                : 'Soal berhasil ditambahkan.');
     }
 
     public function edit(Question $question): Response
     {
+        $this->authorize('update', $question);
+
         $question->load(['options', 'module:id,name,code,color']);
 
         return Inertia::render('Admin/QuestionForm', [
-            'exams' => Exam::orderBy('title')->get(['id', 'title', 'subject_name']),
+            'exams' => Exam::visibleTo(request()->user())->orderBy('title')->get(['id', 'title', 'subject_name']),
             'question' => [
                 'id' => $question->id,
                 'exam_id' => $question->exam_id,
@@ -140,6 +176,9 @@ class QuestionController extends Controller
                 'explanation' => $question->explanation,
                 'is_active' => (bool) $question->is_active,
                 'score_weight' => (float) $question->score_weight,
+                'review_status' => $question->review_status?->value,
+                'review_status_label' => $question->review_status?->label(),
+                'review_note' => $question->review_note,
                 'options' => $question->options->map(fn (QuestionOption $option) => [
                     'id' => $option->id,
                     'label' => $option->label,
@@ -157,7 +196,11 @@ class QuestionController extends Controller
 
     public function update(Request $request, Question $question): RedirectResponse
     {
+        $this->authorize('update', $question);
+
         $data = $this->validated($request, $question);
+        $exam = Exam::findOrFail($data['exam_id']);
+        $this->authorize('manageQuestions', $exam);
 
         $imageUrl = $question->image_url;
         if ($request->boolean('image_remove')) {
@@ -166,7 +209,7 @@ class QuestionController extends Controller
             $imageUrl = $this->storeImage($request->file('image'));
         }
 
-        $question->update([
+        $attributes = [
             'exam_id' => $data['exam_id'],
             'module_id' => $data['module_id'] ?? null,
             'question_number' => $data['question_number'],
@@ -178,23 +221,83 @@ class QuestionController extends Controller
             'explanation' => $data['explanation'] ?? null,
             'is_active' => (bool) ($request->input('is_active', true)),
             'score_weight' => $data['score_weight'],
-        ]);
+        ];
+
+        if ($request->user()->isDosen()) {
+            $attributes += [
+                'review_status' => QuestionReviewStatus::Draft,
+                'review_note' => null,
+                'reviewed_by' => null,
+                'reviewed_at' => null,
+            ];
+        }
+
+        $question->update($attributes);
 
         $this->updateOptions($question, $request);
         $this->syncTotalQuestions($question->exam_id);
 
         return redirect()
             ->route('admin.questions.index', ['exam_id' => $question->exam_id])
-            ->with('success', 'Soal diperbarui.');
+            ->with('success', $request->user()->isDosen()
+                ? 'Soal diperbarui dan dikembalikan ke draf untuk direview ulang.'
+                : 'Soal diperbarui.');
     }
 
     public function destroy(Question $question): RedirectResponse
     {
+        $this->authorize('delete', $question);
+
         $examId = $question->exam_id;
         $question->delete();
         $this->syncTotalQuestions($examId);
 
         return back()->with('success', 'Soal dihapus.');
+    }
+
+    public function submitForReview(Request $request, Question $question): RedirectResponse
+    {
+        $this->authorize('submitForReview', $question);
+
+        if (! $question->review_status?->isEditableByDosen()) {
+            return back()->with('error', 'Soal ini sudah dikirim atau sudah disetujui.');
+        }
+
+        $question->update([
+            'review_status' => QuestionReviewStatus::Pending,
+            'review_note' => null,
+            'reviewed_by' => null,
+            'reviewed_at' => null,
+        ]);
+
+        return back()->with('success', 'Soal dikirim ke admin untuk direview.');
+    }
+
+    public function review(Request $request, Question $question): RedirectResponse
+    {
+        $this->authorize('review', $question);
+
+        $data = $request->validate([
+            'decision' => ['required', 'in:approve,reject'],
+            'review_note' => ['nullable', 'string', 'max:2000'],
+        ]);
+
+        if ($data['decision'] === 'reject' && empty(trim((string) ($data['review_note'] ?? '')))) {
+            return back()->withErrors(['review_note' => 'Catatan review wajib diisi saat menolak soal.']);
+        }
+
+        $question->update([
+            'review_status' => $data['decision'] === 'approve'
+                ? QuestionReviewStatus::Approved
+                : QuestionReviewStatus::Rejected,
+            'review_note' => $data['review_note'] ?? null,
+            'reviewed_by' => $request->user()->id,
+            'reviewed_at' => now(),
+        ]);
+
+        return back()->with('success', $data['decision'] === 'approve'
+            ? 'Soal disetujui.'
+            : 'Soal ditolak dan dikembalikan ke dosen.');
     }
 
     public function import(Request $request, QuestionImportService $importService): RedirectResponse
@@ -207,8 +310,16 @@ class QuestionController extends Controller
 
         $examId = (int) $request->input('exam_id');
         $moduleId = $request->input('module_id') ? (int) $request->input('module_id') : null;
+        $exam = Exam::findOrFail($examId);
+        $this->authorize('manageQuestions', $exam);
 
-        $result = $importService->import($request->file('file'), $examId, $moduleId);
+        $result = $importService->import(
+            $request->file('file'),
+            $examId,
+            $moduleId,
+            $request->user()->id,
+            $request->user()->isDosen() ? QuestionReviewStatus::Draft : QuestionReviewStatus::Approved,
+        );
 
         if ($result['imported'] === 0) {
             $msg = ! empty($result['errors']) ? implode(', ', $result['errors']) : 'Tidak ada soal yang berhasil diimport.';

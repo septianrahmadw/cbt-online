@@ -47,7 +47,7 @@ class ExamService
                 return $existing;
             }
 
-            $questions = $exam->questions()->get();
+            $questions = $exam->questions()->approved()->get();
 
             if ($questions->isEmpty()) {
                 throw new RuntimeException('Soal untuk ujian ini belum tersedia.');

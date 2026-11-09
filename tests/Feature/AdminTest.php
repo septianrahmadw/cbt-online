@@ -279,4 +279,24 @@ class AdminTest extends TestCase
             'passing_grade' => 70,
         ])->assertSessionHasErrors('exam_end_date');
     }
+
+    public function test_exam_assignment_rejects_staff_with_wrong_role(): void
+    {
+        $pengawas = User::factory()->pengawas()->create();
+
+        $this->actingAs(User::factory()->create());
+
+        $this->from('/admin/exams/create')->post('/admin/exams', [
+            'title' => 'Ujian Assignment Salah',
+            'subject_name' => 'Matematika',
+            'duration_minutes' => 45,
+            'exam_date' => now()->subHour()->format('Y-m-d\TH:i'),
+            'exam_end_date' => now()->addDay()->format('Y-m-d\TH:i'),
+            'is_active' => true,
+            'passing_grade' => 70,
+            'dosen_ids' => [$pengawas->id],
+        ])->assertSessionHasErrors('dosen_ids.0');
+
+        $this->assertDatabaseCount('exams', 0);
+    }
 }

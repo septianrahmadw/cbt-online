@@ -32,21 +32,22 @@ class AuthController extends Controller
         $loginInput = trim((string) $request->input('email'));
         $password = (string) $request->input('password');
 
-        // Check by direct credentials first
-        if (Auth::attempt(['email' => $loginInput, 'password' => $password], $request->boolean('remember'))) {
-            $request->session()->regenerate();
-
-            return redirect()->intended(route('admin.dashboard'));
+        if (Auth::attempt([
+            'email' => $loginInput,
+            'password' => $password,
+            'is_active' => true,
+        ], $request->boolean('remember'))) {
+            return $this->completeLogin($request);
         }
 
         // Support username 'admin' matching 'admin@cbt.test'
         if (strtolower($loginInput) === 'admin') {
-            $user = User::where('email', 'admin@cbt.test')->first();
+            $user = User::where('email', 'admin@cbt.test')->where('is_active', true)->first();
+
             if ($user && Hash::check($password, $user->password)) {
                 Auth::login($user, $request->boolean('remember'));
-                $request->session()->regenerate();
 
-                return redirect()->intended(route('admin.dashboard'));
+                return $this->completeLogin($request);
             }
         }
 
@@ -60,5 +61,13 @@ class AuthController extends Controller
         $request->session()->regenerateToken();
 
         return redirect()->route('admin.login');
+    }
+
+    private function completeLogin(Request $request): RedirectResponse
+    {
+        $request->session()->regenerate();
+        $request->user()?->update(['last_login_at' => now()]);
+
+        return redirect()->intended(route('admin.dashboard'));
     }
 }

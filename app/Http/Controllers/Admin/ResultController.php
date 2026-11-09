@@ -19,9 +19,15 @@ class ResultController extends Controller
 {
     public function index(Request $request): Response
     {
-        $exams = Exam::orderBy('title')->get(['id', 'title', 'subject_name']);
+        $exams = Exam::visibleTo($request->user())
+            ->orderBy('title')
+            ->get(['id', 'title', 'subject_name']);
         $selectedExamId = $request->integer('exam_id') ?: $exams->first()?->id;
-        $selectedExam = $selectedExamId ? Exam::find($selectedExamId) : null;
+        $selectedExam = $selectedExamId ? $exams->firstWhere('id', $selectedExamId) : null;
+
+        if ($selectedExamId && ! $selectedExam) {
+            abort(403, 'Anda tidak memiliki akses ke ujian ini.');
+        }
 
         $results = $selectedExamId
             ? ExamResult::with(['participant:id,exam_number,full_name,class_name'])
@@ -30,13 +36,21 @@ class ResultController extends Controller
                 ->get()
             : collect();
 
+        $visibleExamIds = $exams->pluck('id');
+
         $activeSessions = ExamSession::with(['participant:id,exam_number,full_name', 'exam:id,title'])
+            ->whereIn('exam_id', $visibleExamIds)
             ->where('status', 'active')
             ->when($selectedExamId, fn ($query) => $query->where('exam_id', $selectedExamId))
             ->latest('start_time')
             ->get();
 
-        $participants = Participant::orderBy('full_name')->get(['id', 'exam_number', 'full_name']);
+        $participants = $request->user()->isAdmin()
+            ? Participant::orderBy('full_name')->get(['id', 'exam_number', 'full_name'])
+            : collect();
+        $totalParticipants = $request->user()->isAdmin()
+            ? Participant::count()
+            : ExamSession::whereIn('exam_id', $visibleExamIds)->distinct()->count('participant_id');
 
         return Inertia::render('Admin/Results', [
             'exams' => $exams,
@@ -46,7 +60,7 @@ class ResultController extends Controller
             'activeSessions' => $activeSessions,
             'participants' => $participants,
             'summary' => [
-                'total_participants' => Participant::count(),
+                'total_participants' => $totalParticipants,
                 'total_completed' => $results->count(),
                 'average' => $results->count() ? round((float) $results->avg('final_score'), 2) : 0,
                 'passed' => $results->where('passing_status', 'lulus')->count(),
@@ -57,9 +71,15 @@ class ResultController extends Controller
     public function export(Request $request): StreamedResponse
     {
         $examId = $request->integer('exam_id');
+        $visibleExamIds = Exam::visibleTo($request->user())->pluck('id');
+
+        if ($examId && ! $visibleExamIds->contains($examId)) {
+            abort(403, 'Anda tidak memiliki akses ke ujian ini.');
+        }
 
         $results = ExamResult::with(['participant:id,exam_number,full_name,class_name', 'exam:id,title,subject_name'])
             ->when($examId, fn ($query) => $query->where('exam_id', $examId))
+            ->when(! $examId, fn ($query) => $query->whereIn('exam_id', $visibleExamIds))
             ->orderByDesc('final_score')
             ->get();
 
@@ -90,9 +110,15 @@ class ResultController extends Controller
     public function print(Request $request): Response
     {
         $examId = $request->integer('exam_id');
+        $visibleExamIds = Exam::visibleTo($request->user())->pluck('id');
+
+        if ($examId && ! $visibleExamIds->contains($examId)) {
+            abort(403, 'Anda tidak memiliki akses ke ujian ini.');
+        }
 
         $results = ExamResult::with(['participant:id,exam_number,full_name,class_name', 'exam:id,title,subject_name'])
             ->when($examId, fn ($query) => $query->where('exam_id', $examId))
+            ->when(! $examId, fn ($query) => $query->whereIn('exam_id', $visibleExamIds))
             ->orderByDesc('final_score')
             ->get();
 

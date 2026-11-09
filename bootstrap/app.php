@@ -1,7 +1,8 @@
 <?php
 
-use App\Http\Middleware\EnsureAdmin;
 use App\Http\Middleware\EnsureParticipant;
+use App\Http\Middleware\EnsureRole;
+use App\Http\Middleware\EnsureStaff;
 use App\Http\Middleware\HandleInertiaRequests;
 use Illuminate\Foundation\Application;
 use Illuminate\Foundation\Configuration\Exceptions;
@@ -17,14 +18,15 @@ return Application::configure(basePath: dirname(__DIR__))
     )
     ->withMiddleware(function (Middleware $middleware): void {
         $middleware->trustProxies(at: '*');
-        
+
         $middleware->web(append: [
             HandleInertiaRequests::class,
             AddLinkHeadersForPreloadedAssets::class,
         ]);
 
         $middleware->alias([
-            'admin' => EnsureAdmin::class,
+            'staff' => EnsureStaff::class,
+            'role' => EnsureRole::class,
             'participant' => EnsureParticipant::class,
         ]);
     })

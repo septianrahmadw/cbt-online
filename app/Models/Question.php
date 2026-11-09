@@ -2,6 +2,8 @@
 
 namespace App\Models;
 
+use App\QuestionReviewStatus;
+use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
@@ -27,6 +29,11 @@ class Question extends Model
         'image_url',
         'explanation',
         'is_active',
+        'review_status',
+        'review_note',
+        'reviewed_by',
+        'reviewed_at',
+        'created_by',
         'score_weight',
     ];
 
@@ -34,7 +41,19 @@ class Question extends Model
         'question_number' => 'integer',
         'score_weight' => 'float',
         'is_active' => 'boolean',
+        'review_status' => QuestionReviewStatus::class,
+        'reviewed_at' => 'datetime',
     ];
+
+    /**
+     * @return Builder<Question>
+     */
+    public function scopeApproved(Builder $query): Builder
+    {
+        return $query
+            ->where('review_status', QuestionReviewStatus::Approved->value)
+            ->where('is_active', true);
+    }
 
     public function exam(): BelongsTo
     {
@@ -44,6 +63,16 @@ class Question extends Model
     public function module(): BelongsTo
     {
         return $this->belongsTo(Module::class);
+    }
+
+    public function creator(): BelongsTo
+    {
+        return $this->belongsTo(User::class, 'created_by');
+    }
+
+    public function reviewer(): BelongsTo
+    {
+        return $this->belongsTo(User::class, 'reviewed_by');
     }
 
     public function options(): HasMany

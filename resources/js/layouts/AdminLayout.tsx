@@ -11,25 +11,35 @@ import {
     Menu,
     Settings,
     Tags,
+    UserCog,
     Users,
     X,
 } from 'lucide-react';
 import { useState, type ReactNode } from 'react';
-import type { SharedProps } from '../types/shared';
+import type { SharedProps, UserRole } from '../types/shared';
 import { Alert } from '../components/ui';
 import { ThemeToggle } from '../components/ThemeToggle';
 import { cn } from '../lib/utils';
 
-const navigation = [
+interface NavigationItem {
+    href: string;
+    label: string;
+    icon: typeof LayoutDashboard;
+    exact: boolean;
+    roles?: UserRole[];
+}
+
+const navigation: NavigationItem[] = [
     { href: '/admin', label: 'Dashboard', icon: LayoutDashboard, exact: true },
-    { href: '/admin/participants', label: 'Peserta', icon: Users, exact: true },
-    { href: '/admin/participant-categories', label: 'Kategori Peserta', icon: Tags, exact: false },
-    { href: '/admin/exams', label: 'Daftar Ujian', icon: FileText, exact: false },
-    { href: '/admin/questions', label: 'Bank Soal', icon: BookOpen, exact: false },
-    { href: '/admin/modules', label: 'Modul Soal', icon: ClipboardList, exact: false },
-    { href: '/admin/results', label: 'Nilai & Rekap', icon: BarChart3, exact: false },
-    { href: '/admin/sessions', label: 'Sesi Berjalan', icon: Activity, exact: false },
-    { href: '/admin/settings', label: 'Pengaturan', icon: Settings, exact: false },
+    { href: '/admin/participants', label: 'Peserta', icon: Users, exact: true, roles: ['admin'] },
+    { href: '/admin/participant-categories', label: 'Kategori Peserta', icon: Tags, exact: false, roles: ['admin'] },
+    { href: '/admin/exams', label: 'Daftar Ujian', icon: FileText, exact: false, roles: ['admin', 'dosen', 'pengawas'] },
+    { href: '/admin/questions', label: 'Bank Soal', icon: BookOpen, exact: false, roles: ['admin', 'dosen'] },
+    { href: '/admin/modules', label: 'Modul Soal', icon: ClipboardList, exact: false, roles: ['admin'] },
+    { href: '/admin/results', label: 'Nilai & Rekap', icon: BarChart3, exact: false, roles: ['admin', 'dosen', 'pengawas'] },
+    { href: '/admin/sessions', label: 'Sesi Berjalan', icon: Activity, exact: false, roles: ['admin', 'pengawas'] },
+    { href: '/admin/users', label: 'Manajemen User', icon: UserCog, exact: false, roles: ['admin'] },
+    { href: '/admin/settings', label: 'Pengaturan', icon: Settings, exact: false, roles: ['admin'] },
 ];
 
 function todayLabel(): string {
@@ -59,6 +69,9 @@ export function AdminLayout({
 
     const user = auth?.user;
     const initial = (user?.name ?? 'A').trim().charAt(0).toUpperCase();
+    const visibleNavigation = navigation.filter(
+        (item) => !item.roles || (user?.role && item.roles.includes(user.role)),
+    );
 
     return (
         <div className="min-h-screen bg-slate-50 dark:bg-slate-950">
@@ -93,7 +106,7 @@ export function AdminLayout({
                 </div>
 
                 <nav className="flex-1 space-y-1 overflow-y-auto px-3 py-4">
-                    {navigation.map((item) => {
+                    {visibleNavigation.map((item) => {
                         const Icon = item.icon;
                         const active = item.exact ? currentUrl === item.href : currentUrl.startsWith(item.href);
 
@@ -124,7 +137,7 @@ export function AdminLayout({
                             </div>
                             <div className="min-w-0">
                                 <p className="truncate text-sm font-semibold text-white">{user.name}</p>
-                                <p className="truncate text-xs text-brand-200/80">{user.email}</p>
+                                <p className="truncate text-xs text-brand-200/80">{user.role_label}</p>
                             </div>
                         </div>
                     )}
@@ -169,7 +182,9 @@ export function AdminLayout({
                                 <p className="text-sm font-semibold text-slate-900 dark:text-white">
                                     {user?.name ?? 'Administrator'}
                                 </p>
-                                <p className="text-xs text-slate-500 dark:text-slate-400">Administrator</p>
+                                <p className="text-xs text-slate-500 dark:text-slate-400">
+                                    {user?.role_label ?? 'Staff'}
+                                </p>
                             </div>
                         </div>
                     </div>

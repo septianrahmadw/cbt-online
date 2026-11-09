@@ -39,6 +39,9 @@ interface QuestionData {
     explanation: string | null;
     is_active: boolean;
     score_weight: number;
+    review_status?: 'draft' | 'pending' | 'approved' | 'rejected';
+    review_status_label?: string;
+    review_note?: string | null;
     options: {
         id?: number;
         label: string;
@@ -283,6 +286,17 @@ export default function QuestionForm({
             }
         >
             <form onSubmit={submit} className="mx-auto max-w-4xl space-y-5">
+                {question?.review_status === 'rejected' && question.review_note && (
+                    <Alert tone="error">
+                        <span className="block font-semibold">Soal ditolak — perbaiki sesuai catatan review:</span>
+                        <span className="mt-1 block">{question.review_note}</span>
+                    </Alert>
+                )}
+                {question?.review_status === 'pending' && (
+                    <Alert tone="info">
+                        Soal sedang menunggu review admin. Setelah disimpan, soal akan kembali menjadi draf.
+                    </Alert>
+                )}
                 {Object.keys(form.errors).length > 0 && (
                     <Alert tone="error">
                         <ul className="list-inside list-disc space-y-1">

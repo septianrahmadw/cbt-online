@@ -1,12 +1,19 @@
-import { Link, router } from '@inertiajs/react';
+import { Link, router, usePage } from '@inertiajs/react';
 import { BookOpen, Pencil, Plus, Trash2, Users } from 'lucide-react';
 import { Badge, Card, EmptyState } from '../../components/ui';
 import { AdminLayout } from '../../layouts/AdminLayout';
+import type { SharedProps } from '../../types/shared';
 
 interface ExamCategory {
     id: number;
     name: string;
     code: string;
+}
+
+interface AssignedUser {
+    id: number;
+    name: string;
+    role: 'dosen' | 'pengawas';
 }
 
 interface Exam {
@@ -25,6 +32,7 @@ interface Exam {
     results_count: number;
     participant_categories_count: number;
     participant_categories: ExamCategory[];
+    assigned_users: AssignedUser[];
 }
 
 interface Paginator {
@@ -37,6 +45,11 @@ interface Paginator {
 }
 
 export default function Exams({ exams }: { exams: Paginator }) {
+    const { auth } = usePage<SharedProps>().props;
+    const role = auth?.user?.role;
+    const isAdmin = role === 'admin';
+    const canManageQuestions = isAdmin || role === 'dosen';
+
     const remove = (exam: Exam) => {
         if (window.confirm(`Hapus ujian ${exam.title}? Semua soal dan hasil terkait akan terhapus.`)) {
             router.delete(`/admin/exams/${exam.id}`, { preserveScroll: true });
@@ -48,9 +61,11 @@ export default function Exams({ exams }: { exams: Paginator }) {
             title="Daftar Ujian"
             subtitle={`${exams.total} ujian terdaftar.`}
             actions={
-                <Link href="/admin/exams/create" className="btn-primary h-10 px-3">
-                    <Plus size={16} /> Buat Ujian
-                </Link>
+                isAdmin ? (
+                    <Link href="/admin/exams/create" className="btn-primary h-10 px-3">
+                        <Plus size={16} /> Buat Ujian
+                    </Link>
+                ) : undefined
             }
         >
             <Card>
@@ -81,6 +96,15 @@ export default function Exams({ exams }: { exams: Paginator }) {
                                                     ? `${new Date(exam.exam_date).toLocaleString('id-ID')} s/d ${new Date(exam.exam_end_date).toLocaleString('id-ID')}`
                                                     : 'Jadwal belum ditentukan'}
                                             </p>
+                                            {isAdmin && exam.assigned_users.length > 0 && (
+                                                <div className="mt-1 flex flex-wrap gap-1">
+                                                    {exam.assigned_users.map((staff) => (
+                                                        <Badge key={staff.id} tone={staff.role === 'dosen' ? 'blue' : 'slate'}>
+                                                            {staff.name}
+                                                        </Badge>
+                                                    ))}
+                                                </div>
+                                            )}
                                         </td>
                                         <td className="py-2 text-slate-700 dark:text-slate-300">{exam.duration_minutes} menit</td>
                                         <td className="py-2 text-slate-700 dark:text-slate-300">{exam.questions_count}</td>
@@ -106,28 +130,34 @@ export default function Exams({ exams }: { exams: Paginator }) {
                                         </td>
                                         <td className="py-2">
                                             <div className="flex justify-end gap-1">
-                                                <Link
-                                                    href={`/admin/questions?exam_id=${exam.id}`}
-                                                    className="rounded-md p-2 text-slate-500 transition hover:bg-slate-100 hover:text-slate-700 dark:text-slate-400 dark:hover:bg-slate-800 dark:hover:text-slate-200"
-                                                    aria-label="Bank soal"
-                                                >
-                                                    <BookOpen size={15} />
-                                                </Link>
-                                                <Link
-                                                    href={`/admin/exams/${exam.id}/edit`}
-                                                    className="rounded-md p-2 text-slate-500 transition hover:bg-slate-100 hover:text-slate-700 dark:text-slate-400 dark:hover:bg-slate-800 dark:hover:text-slate-200"
-                                                    aria-label="Edit"
-                                                >
-                                                    <Pencil size={15} />
-                                                </Link>
-                                                <button
-                                                    type="button"
-                                                    onClick={() => remove(exam)}
-                                                    className="rounded-md p-2 text-slate-500 transition hover:bg-rose-50 hover:text-rose-600 dark:text-slate-400 dark:hover:bg-rose-500/10 dark:hover:text-rose-300"
-                                                    aria-label="Hapus"
-                                                >
-                                                    <Trash2 size={15} />
-                                                </button>
+                                                {canManageQuestions && (
+                                                    <Link
+                                                        href={`/admin/questions?exam_id=${exam.id}`}
+                                                        className="rounded-md p-2 text-slate-500 transition hover:bg-slate-100 hover:text-slate-700 dark:text-slate-400 dark:hover:bg-slate-800 dark:hover:text-slate-200"
+                                                        aria-label="Bank soal"
+                                                    >
+                                                        <BookOpen size={15} />
+                                                    </Link>
+                                                )}
+                                                {isAdmin && (
+                                                    <>
+                                                        <Link
+                                                            href={`/admin/exams/${exam.id}/edit`}
+                                                            className="rounded-md p-2 text-slate-500 transition hover:bg-slate-100 hover:text-slate-700 dark:text-slate-400 dark:hover:bg-slate-800 dark:hover:text-slate-200"
+                                                            aria-label="Edit"
+                                                        >
+                                                            <Pencil size={15} />
+                                                        </Link>
+                                                        <button
+                                                            type="button"
+                                                            onClick={() => remove(exam)}
+                                                            className="rounded-md p-2 text-slate-500 transition hover:bg-rose-50 hover:text-rose-600 dark:text-slate-400 dark:hover:bg-rose-500/10 dark:hover:text-rose-300"
+                                                            aria-label="Hapus"
+                                                        >
+                                                            <Trash2 size={15} />
+                                                        </button>
+                                                    </>
+                                                )}
                                             </div>
                                         </td>
                                     </tr>

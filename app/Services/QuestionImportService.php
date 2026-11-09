@@ -6,6 +6,7 @@ use App\Models\Exam;
 use App\Models\Module;
 use App\Models\Question;
 use App\Models\QuestionOption;
+use App\QuestionReviewStatus;
 use Illuminate\Http\UploadedFile;
 use Illuminate\Support\Facades\DB;
 use ZipArchive;
@@ -15,8 +16,13 @@ class QuestionImportService
     /**
      * @return array{imported: int, failed: int, errors: array<string>}
      */
-    public function import(UploadedFile $file, int $examId, ?int $defaultModuleId = null): array
-    {
+    public function import(
+        UploadedFile $file,
+        int $examId,
+        ?int $defaultModuleId = null,
+        ?int $createdBy = null,
+        QuestionReviewStatus $reviewStatus = QuestionReviewStatus::Approved,
+    ): array {
         $exam = Exam::findOrFail($examId);
         $rows = $this->parseFile($file);
 
@@ -38,6 +44,8 @@ class QuestionImportService
             $exam,
             $defaultModuleId,
             $modulesByCode,
+            $createdBy,
+            $reviewStatus,
             &$imported,
             &$failed,
             &$errors
@@ -96,6 +104,10 @@ class QuestionImportService
                     'explanation' => $explanation !== '' ? $explanation : null,
                     'score_weight' => $scoreWeight,
                     'is_active' => true,
+                    'review_status' => $reviewStatus,
+                    'reviewed_by' => $reviewStatus === QuestionReviewStatus::Approved ? $createdBy : null,
+                    'reviewed_at' => $reviewStatus === QuestionReviewStatus::Approved ? now() : null,
+                    'created_by' => $createdBy,
                 ]);
 
                 // Options A through F

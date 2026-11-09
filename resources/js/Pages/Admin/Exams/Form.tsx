@@ -10,6 +10,11 @@ interface ExamCategoryOption {
     participants_count: number;
 }
 
+interface StaffOption {
+    id: number;
+    name: string;
+}
+
 interface ExamData {
     id: number;
     title: string;
@@ -23,14 +28,20 @@ interface ExamData {
     randomize_questions: boolean;
     passing_grade: number;
     category_ids: number[];
+    dosen_ids: number[];
+    pengawas_ids: number[];
 }
 
 export default function ExamForm({
     exam,
     categories,
+    dosens,
+    pengawas,
 }: {
     exam: ExamData | null;
     categories: ExamCategoryOption[];
+    dosens: StaffOption[];
+    pengawas: StaffOption[];
 }) {
     const form = useForm({
         title: exam?.title ?? '',
@@ -49,14 +60,16 @@ export default function ExamForm({
         randomize_questions: exam?.randomize_questions ?? true,
         passing_grade: exam?.passing_grade ?? 70,
         category_ids: (exam?.category_ids ?? []) as number[],
+        dosen_ids: (exam?.dosen_ids ?? []) as number[],
+        pengawas_ids: (exam?.pengawas_ids ?? []) as number[],
     });
 
-    const toggleCategory = (id: number) => {
+    const toggle = (field: 'category_ids' | 'dosen_ids' | 'pengawas_ids', id: number) => {
         form.setData(
-            'category_ids',
-            form.data.category_ids.includes(id)
-                ? form.data.category_ids.filter((categoryId) => categoryId !== id)
-                : [...form.data.category_ids, id],
+            field,
+            form.data[field].includes(id)
+                ? form.data[field].filter((itemId) => itemId !== id)
+                : [...form.data[field], id],
         );
     };
 
@@ -261,7 +274,7 @@ export default function ExamForm({
                                             <input
                                                 type="checkbox"
                                                 checked={checked}
-                                                onChange={() => toggleCategory(category.id)}
+                                                onChange={() => toggle('category_ids', category.id)}
                                                 className="h-4 w-4 rounded border-slate-300 bg-white text-brand-600 focus:ring-brand-500 dark:border-slate-600 dark:bg-slate-950"
                                             />
                                             <span className="min-w-0 flex-1">
@@ -287,6 +300,61 @@ export default function ExamForm({
                                 {form.errors.category_ids ?? form.errors['category_ids.0']}
                             </p>
                         )}
+                    </div>
+
+                    <div className="grid gap-4 sm:grid-cols-2">
+                        <div>
+                            <Label>Dosen Pengampu</Label>
+                            <p className="mb-2 text-xs text-slate-500 dark:text-slate-400">
+                                Dosen hanya dapat mengelola soal dan melihat nilai pada ujian yang ditugaskan.
+                            </p>
+                            <div className="max-h-48 overflow-y-auto rounded-xl border border-slate-200 divide-y divide-slate-100 dark:border-slate-700 dark:divide-slate-800">
+                                {dosens.length === 0 ? (
+                                    <p className="p-3 text-sm text-slate-500 dark:text-slate-400">Belum ada dosen aktif.</p>
+                                ) : (
+                                    dosens.map((dosen) => (
+                                        <label
+                                            key={dosen.id}
+                                            className="flex cursor-pointer items-center gap-3 px-3 py-2.5 hover:bg-slate-50 dark:hover:bg-slate-800"
+                                        >
+                                            <input
+                                                type="checkbox"
+                                                checked={form.data.dosen_ids.includes(dosen.id)}
+                                                onChange={() => toggle('dosen_ids', dosen.id)}
+                                                className="h-4 w-4 rounded border-slate-300 bg-white text-brand-600 focus:ring-brand-500 dark:border-slate-600 dark:bg-slate-950"
+                                            />
+                                            <span className="text-sm text-slate-900 dark:text-white">{dosen.name}</span>
+                                        </label>
+                                    ))
+                                )}
+                            </div>
+                        </div>
+                        <div>
+                            <Label>Pengawas</Label>
+                            <p className="mb-2 text-xs text-slate-500 dark:text-slate-400">
+                                Pengawas dapat memantau dan menghentikan sesi pada ujian yang ditugaskan.
+                            </p>
+                            <div className="max-h-48 overflow-y-auto rounded-xl border border-slate-200 divide-y divide-slate-100 dark:border-slate-700 dark:divide-slate-800">
+                                {pengawas.length === 0 ? (
+                                    <p className="p-3 text-sm text-slate-500 dark:text-slate-400">Belum ada pengawas aktif.</p>
+                                ) : (
+                                    pengawas.map((staff) => (
+                                        <label
+                                            key={staff.id}
+                                            className="flex cursor-pointer items-center gap-3 px-3 py-2.5 hover:bg-slate-50 dark:hover:bg-slate-800"
+                                        >
+                                            <input
+                                                type="checkbox"
+                                                checked={form.data.pengawas_ids.includes(staff.id)}
+                                                onChange={() => toggle('pengawas_ids', staff.id)}
+                                                className="h-4 w-4 rounded border-slate-300 bg-white text-brand-600 focus:ring-brand-500 dark:border-slate-600 dark:bg-slate-950"
+                                            />
+                                            <span className="text-sm text-slate-900 dark:text-white">{staff.name}</span>
+                                        </label>
+                                    ))
+                                )}
+                            </div>
+                        </div>
                     </div>
 
                     <div className="space-y-2 text-sm text-slate-700 dark:text-slate-300">

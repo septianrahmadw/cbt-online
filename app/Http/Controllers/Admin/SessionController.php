@@ -4,7 +4,9 @@ namespace App\Http\Controllers\Admin;
 
 use App\Http\Controllers\Controller;
 use App\Models\AuditLog;
+use App\Models\Exam;
 use App\Models\ExamSession;
+use App\Models\User;
 use App\Services\ExamService;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
@@ -14,9 +16,12 @@ use Inertia\Response;
 
 class SessionController extends Controller
 {
-    public function index(): Response
+    public function index(Request $request): Response
     {
+        $this->authorize('viewAny', ExamSession::class);
+
         $sessions = ExamSession::query()
+            ->whereHas('exam', fn ($query) => $query->visibleTo($request->user()))
             ->with([
                 'participant:id,exam_number,full_name,class_name',
                 'exam:id,title,subject_name,is_active,duration_minutes',
@@ -55,11 +60,17 @@ class SessionController extends Controller
             'action' => ['required', 'in:submit,delete'],
         ]);
 
+        $this->authorize('stop', $examSession);
+
+        if ($data['action'] === 'delete') {
+            $this->authorize('delete', $examSession);
+        }
+
         if (! $examSession->isActive()) {
             return back()->with('error', 'Sesi ini sudah tidak aktif.');
         }
 
-        $this->applyStop($examSession, $data['action']);
+        $this->applyStop($examSession, $data['action'], actor: $request->user());
 
         return back()->with('success', $data['action'] === 'submit'
             ? 'Sesi dihentikan dan jawaban dikirim untuk dinilai.'
@@ -73,6 +84,13 @@ class SessionController extends Controller
             'action' => ['required', 'in:submit,delete'],
         ]);
 
+        $exam = Exam::findOrFail($data['exam_id']);
+        $this->authorize('supervise', $exam);
+
+        if ($data['action'] === 'delete' && ! $request->user()->isAdmin()) {
+            abort(403, 'Hanya admin yang dapat menghapus sesi.');
+        }
+
         $sessions = ExamSession::where('exam_id', $data['exam_id'])
             ->where('status', 'active')
             ->where('is_completed', false)
@@ -83,12 +101,14 @@ class SessionController extends Controller
             return back()->with('error', 'Tidak ada sesi berjalan untuk ujian ini.');
         }
 
-        DB::transaction(function () use ($sessions, $data) {
+        $actor = $request->user();
+
+        DB::transaction(function () use ($sessions, $data, $actor) {
             foreach ($sessions as $session) {
                 $this->applyStop($session, $data['action'], recordAudit: false);
             }
 
-            AuditLog::record('exam.session_stop_all', 'admin', auth()->id(), 'exam', (int) $data['exam_id'], [
+            AuditLog::record('exam.session_stop_all', $actor->role?->value, $actor->id, 'exam', (int) $data['exam_id'], [
                 'action' => $data['action'],
                 'sessions_affected' => $sessions->count(),
             ]);
@@ -97,7 +117,7 @@ class SessionController extends Controller
         return back()->with('success', $sessions->count().' sesi berjalan dihentikan.');
     }
 
-    private function applyStop(ExamSession $session, string $action, bool $recordAudit = true): void
+    private function applyStop(ExamSession $session, string $action, bool $recordAudit = true, ?User $actor = null): void
     {
         if ($action === 'submit') {
             app(ExamService::class)->submit($session, true);
@@ -106,7 +126,9 @@ class SessionController extends Controller
         }
 
         if ($recordAudit) {
-            AuditLog::record('exam.session_stopped', 'admin', auth()->id(), 'exam_session', $session->id, [
+            $actor ??= auth()->user();
+
+            AuditLog::record('exam.session_stopped', $actor?->role?->value, $actor?->id, 'exam_session', $session->id, [
                 'action' => $action,
                 'exam_id' => $session->exam_id,
                 'participant_id' => $session->participant_id,

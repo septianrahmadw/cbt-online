@@ -28,7 +28,21 @@ class HandleInertiaRequests extends Middleware
                 'school_name', 'logo_url', 'academic_year', 'exam_event_name', 'passing_grade_default',
             ]),
             'auth' => [
-                'user' => fn () => $request->user()?->only(['id', 'name', 'email']),
+                'user' => function () use ($request) {
+                    $user = $request->user();
+
+                    if (! $user) {
+                        return null;
+                    }
+
+                    return [
+                        'id' => $user->id,
+                        'name' => $user->name,
+                        'email' => $user->email,
+                        'role' => $user->role?->value,
+                        'role_label' => $user->role?->label(),
+                    ];
+                },
             ],
             'examParticipant' => function () use ($request) {
                 $id = $request->session()->get('exam_session_id');

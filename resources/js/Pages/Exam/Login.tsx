@@ -77,7 +77,7 @@ export default function ExamLogin() {
 
     return (
         <ExamLayout>
-            <div className="w-full">
+            <div className="mx-auto w-full max-w-md">
                 <div className="mb-6 text-center">
                     <div className="mx-auto mb-4 flex h-12 w-12 items-center justify-center rounded-2xl bg-brand-600 text-white shadow-md shadow-brand-200 dark:shadow-none">
                         <BookOpen size={24} />

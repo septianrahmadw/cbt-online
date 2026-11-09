@@ -6,10 +6,14 @@ export interface Institution {
     passing_grade_default: number;
 }
 
+export type UserRole = 'admin' | 'dosen' | 'pengawas';
+
 export interface AuthUser {
     id: number;
     name: string;
     email: string;
+    role: UserRole;
+    role_label: string;
 }
 
 export interface SharedProps {

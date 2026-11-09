@@ -8,8 +8,11 @@ import {
     Pencil,
     Plus,
     RotateCcw,
+    Send,
+    ShieldCheck,
     Trash2,
     Upload,
+    XCircle,
 } from 'lucide-react';
 import { useState } from 'react';
 import { AdminLayout } from '../../layouts/AdminLayout';
@@ -39,6 +42,12 @@ interface Question {
     explanation: string | null;
     is_active: boolean;
     score_weight: number;
+    review_status: 'draft' | 'pending' | 'approved' | 'rejected';
+    review_status_label: string;
+    review_note: string | null;
+    can_edit: boolean;
+    can_submit_review: boolean;
+    can_review: boolean;
     module: {
         id: number;
         name: string;
@@ -79,6 +88,12 @@ export default function Questions({
     selectedModuleId: string | number;
 }) {
     const [importOpen, setImportOpen] = useState(false);
+    const [reviewing, setReviewing] = useState<Question | null>(null);
+
+    const reviewForm = useForm({
+        decision: 'approve' as 'approve' | 'reject',
+        review_note: '',
+    });
 
     const importForm = useForm({
         exam_id: selectedExamId ?? '',
@@ -114,6 +129,36 @@ export default function Questions({
         if (window.confirm(`Hapus soal nomor ${question.question_number}?`)) {
             router.delete(`/admin/questions/${question.id}`, { preserveScroll: true });
         }
+    };
+
+    const submitForReview = (question: Question) => {
+        router.post(`/admin/questions/${question.id}/submit-review`, {}, { preserveScroll: true });
+    };
+
+    const openReview = (question: Question) => {
+        setReviewing(question);
+        reviewForm.setData({ decision: 'approve', review_note: '' });
+        reviewForm.clearErrors();
+    };
+
+    const submitReview = (event: React.FormEvent) => {
+        event.preventDefault();
+
+        if (!reviewing) {
+            return;
+        }
+
+        reviewForm.post(`/admin/questions/${reviewing.id}/review`, {
+            preserveScroll: true,
+            onSuccess: () => setReviewing(null),
+        });
+    };
+
+    const reviewTone = (status: Question['review_status']) => {
+        if (status === 'approved') return 'green';
+        if (status === 'pending') return 'yellow';
+        if (status === 'rejected') return 'red';
+        return 'slate';
     };
 
     const submitImport = (event: React.FormEvent) => {
@@ -296,6 +341,10 @@ export default function Questions({
                                         </Badge>
                                     )}
 
+                                    <Badge tone={reviewTone(question.review_status)}>
+                                        {question.review_status_label}
+                                    </Badge>
+
                                     {!question.is_active && (
                                         <Badge tone="slate">Nonaktif</Badge>
                                     )}
@@ -305,22 +354,40 @@ export default function Questions({
                                     </span>
                                 </div>
 
-                                <div className="flex items-center gap-1.5 self-end sm:self-start">
-                                    <Link
-                                        href={`/admin/questions/${question.id}/edit`}
-                                        className="btn-secondary h-8 px-2.5 text-xs"
-                                    >
-                                        <Pencil size={13} /> Edit
-                                    </Link>
-                                    <button
-                                        type="button"
-                                        onClick={() => remove(question)}
-                                        className="btn-ghost h-8 px-2 text-xs text-rose-600 hover:bg-rose-50 hover:text-rose-700 dark:text-rose-400 dark:hover:bg-rose-500/10 dark:hover:text-rose-300"
-                                        aria-label="Hapus soal"
-                                        title="Hapus soal"
-                                    >
-                                        <Trash2 size={15} />
-                                    </button>
+                                <div className="flex flex-wrap items-center gap-1.5 self-end sm:self-start">
+                                    {question.can_submit_review && (
+                                        <Button
+                                            variant="secondary"
+                                            size="sm"
+                                            onClick={() => submitForReview(question)}
+                                        >
+                                            <Send size={13} /> Kirim Review
+                                        </Button>
+                                    )}
+                                    {question.can_review && question.review_status === 'pending' && (
+                                        <Button variant="success" size="sm" onClick={() => openReview(question)}>
+                                            <ShieldCheck size={13} /> Review
+                                        </Button>
+                                    )}
+                                    {question.can_edit && (
+                                        <Link
+                                            href={`/admin/questions/${question.id}/edit`}
+                                            className="btn-secondary h-8 px-2.5 text-xs"
+                                        >
+                                            <Pencil size={13} /> Edit
+                                        </Link>
+                                    )}
+                                    {question.can_edit && (
+                                        <button
+                                            type="button"
+                                            onClick={() => remove(question)}
+                                            className="btn-ghost h-8 px-2 text-xs text-rose-600 hover:bg-rose-50 hover:text-rose-700 dark:text-rose-400 dark:hover:bg-rose-500/10 dark:hover:text-rose-300"
+                                            aria-label="Hapus soal"
+                                            title="Hapus soal"
+                                        >
+                                            <Trash2 size={15} />
+                                        </button>
+                                    )}
                                 </div>
                             </div>
 
@@ -394,6 +461,15 @@ export default function Questions({
                                 ))}
                             </ul>
 
+                            {question.review_status === 'rejected' && question.review_note && (
+                                <div className="mt-3 rounded-lg border border-rose-200 bg-rose-50 p-3 text-xs text-rose-800 dark:border-rose-500/40 dark:bg-rose-500/10 dark:text-rose-200">
+                                    <span className="mb-0.5 block text-[10px] font-bold uppercase tracking-wider">
+                                        Catatan Review
+                                    </span>
+                                    {question.review_note}
+                                </div>
+                            )}
+
                             {/* Explanation / Pembahasan */}
                             {question.explanation && (
                                 <div className="mt-3.5 rounded-lg border border-sky-100 bg-sky-50/70 p-3 text-xs text-sky-950 dark:border-sky-900/40 dark:bg-sky-950/30 dark:text-sky-200">
@@ -407,6 +483,88 @@ export default function Questions({
                     ))}
                 </div>
             )}
+
+            <Modal
+                open={reviewing !== null}
+                onClose={() => setReviewing(null)}
+                title={`Review Soal #${reviewing?.question_number ?? ''}`}
+                footer={
+                    <>
+                        <Button type="button" variant="secondary" onClick={() => setReviewing(null)}>
+                            Batal
+                        </Button>
+                        <Button
+                            type="submit"
+                            form="review-form"
+                            variant={reviewForm.data.decision === 'approve' ? 'success' : 'danger'}
+                            disabled={reviewForm.processing}
+                        >
+                            {reviewForm.processing
+                                ? 'Menyimpan...'
+                                : reviewForm.data.decision === 'approve'
+                                  ? 'Setujui Soal'
+                                  : 'Tolak Soal'}
+                        </Button>
+                    </>
+                }
+            >
+                <form id="review-form" onSubmit={submitReview} className="space-y-4">
+                    <div className="rounded-xl border border-slate-200 bg-slate-50 p-3 text-xs text-slate-700 dark:border-slate-800 dark:bg-slate-900 dark:text-slate-300">
+                        {reviewing?.question_text}
+                    </div>
+
+                    <div className="grid grid-cols-2 gap-2">
+                        <button
+                            type="button"
+                            onClick={() => reviewForm.setData('decision', 'approve')}
+                            className={cn(
+                                'flex items-center justify-center gap-2 rounded-xl border px-3 py-2.5 text-sm font-semibold transition',
+                                reviewForm.data.decision === 'approve'
+                                    ? 'border-emerald-300 bg-emerald-50 text-emerald-700 dark:border-emerald-500/50 dark:bg-emerald-500/10 dark:text-emerald-300'
+                                    : 'border-slate-200 text-slate-600 dark:border-slate-700 dark:text-slate-300',
+                            )}
+                        >
+                            <CheckCircle2 size={16} /> Setujui
+                        </button>
+                        <button
+                            type="button"
+                            onClick={() => reviewForm.setData('decision', 'reject')}
+                            className={cn(
+                                'flex items-center justify-center gap-2 rounded-xl border px-3 py-2.5 text-sm font-semibold transition',
+                                reviewForm.data.decision === 'reject'
+                                    ? 'border-rose-300 bg-rose-50 text-rose-700 dark:border-rose-500/50 dark:bg-rose-500/10 dark:text-rose-300'
+                                    : 'border-slate-200 text-slate-600 dark:border-slate-700 dark:text-slate-300',
+                            )}
+                        >
+                            <XCircle size={16} /> Tolak
+                        </button>
+                    </div>
+
+                    <div>
+                        <Label htmlFor="review-note">
+                            Catatan Review
+                            {reviewForm.data.decision === 'reject' && <span className="text-rose-500"> *</span>}
+                        </Label>
+                        <textarea
+                            id="review-note"
+                            value={reviewForm.data.review_note}
+                            onChange={(event) => reviewForm.setData('review_note', event.target.value)}
+                            rows={4}
+                            className="input"
+                            placeholder={
+                                reviewForm.data.decision === 'reject'
+                                    ? 'Jelaskan bagian soal yang perlu diperbaiki dosen.'
+                                    : 'Catatan opsional untuk dosen.'
+                            }
+                        />
+                        {reviewForm.errors.review_note && (
+                            <p className="mt-1 text-xs text-rose-600 dark:text-rose-400">
+                                {reviewForm.errors.review_note}
+                            </p>
+                        )}
+                    </div>
+                </form>
+            </Modal>
 
             {/* Import Soal Modal */}
             <Modal

@@ -1,8 +1,9 @@
-import { Link, router, useForm } from '@inertiajs/react';
+import { Link, router, useForm, usePage } from '@inertiajs/react';
 import { Download, Printer, RotateCcw, Users } from 'lucide-react';
 import { useState } from 'react';
 import { Alert, Badge, Button, Card, EmptyState, Select } from '../../components/ui';
 import { AdminLayout } from '../../layouts/AdminLayout';
+import type { SharedProps } from '../../types/shared';
 
 interface ExamOption {
     id: number;
@@ -52,6 +53,9 @@ export default function Results({
     participants: ParticipantOption[];
     summary: { total_participants: number; total_completed: number; average: number; passed: number };
 }) {
+    const { auth } = usePage<SharedProps>().props;
+    const isAdmin = auth?.user?.role === 'admin';
+    const canViewSessions = isAdmin || auth?.user?.role === 'pengawas';
     const [confirmReset, setConfirmReset] = useState(false);
 
     const resetForm = useForm({
@@ -133,7 +137,7 @@ export default function Results({
                 ))}
             </div>
 
-            <div className="grid gap-4 xl:grid-cols-[1fr_340px]">
+            <div className={isAdmin ? 'grid gap-4 xl:grid-cols-[1fr_340px]' : 'grid gap-4'}>
                 <div className="space-y-4">
                     <Card>
                         <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
@@ -150,12 +154,14 @@ export default function Results({
                                     </p>
                                 </div>
                             </div>
-                            <Link
-                                href="/admin/sessions"
-                                className="inline-flex h-10 items-center gap-2 rounded-xl border border-slate-200 bg-white px-3 text-sm font-semibold text-slate-700 shadow-sm hover:bg-slate-50 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-200 dark:hover:bg-slate-800"
-                            >
-                                Buka Sesi Berjalan &rarr;
-                            </Link>
+                            {canViewSessions && (
+                                <Link
+                                    href="/admin/sessions"
+                                    className="inline-flex h-10 items-center gap-2 rounded-xl border border-slate-200 bg-white px-3 text-sm font-semibold text-slate-700 shadow-sm hover:bg-slate-50 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-200 dark:hover:bg-slate-800"
+                                >
+                                    Buka Sesi Berjalan &rarr;
+                                </Link>
+                            )}
                         </div>
                     </Card>
 
@@ -212,55 +218,57 @@ export default function Results({
                     </Card>
                 </div>
 
-                <Card className="h-fit">
-                    <h2 className="mb-1 flex items-center gap-2 text-sm font-semibold text-slate-900 dark:text-white">
-                        <RotateCcw size={16} /> Reset Peserta
-                    </h2>
-                    <p className="mb-3 text-xs text-slate-500 dark:text-slate-400">
-                        Menghapus sesi dan hasil peserta pada ujian ini sehingga dapat mengerjakan ulang.
-                    </p>
+                {isAdmin && (
+                    <Card className="h-fit">
+                        <h2 className="mb-1 flex items-center gap-2 text-sm font-semibold text-slate-900 dark:text-white">
+                            <RotateCcw size={16} /> Reset Peserta
+                        </h2>
+                        <p className="mb-3 text-xs text-slate-500 dark:text-slate-400">
+                            Menghapus sesi dan hasil peserta pada ujian ini sehingga dapat mengerjakan ulang.
+                        </p>
 
-                    {!selectedExamId ? (
-                        <Alert tone="info">Pilih ujian terlebih dahulu.</Alert>
-                    ) : !confirmReset ? (
-                        <Button variant="danger" className="w-full" onClick={() => setConfirmReset(true)}>
-                            Pilih Peserta untuk Direset
-                        </Button>
-                    ) : (
-                        <form onSubmit={submitReset} className="space-y-3">
-                            <Alert tone="error">
-                                Tindakan ini menghapus jawaban dan nilai peserta. Tidak dapat dibatalkan.
-                            </Alert>
-                            <Select
-                                value={resetForm.data.participant_id}
-                                onChange={(event) => resetForm.setData('participant_id', event.target.value)}
-                                required
-                            >
-                                <option value="">Pilih peserta...</option>
-                                {participants.map((participant) => (
-                                    <option key={participant.id} value={participant.id}>
-                                        {participant.exam_number} — {participant.full_name}
-                                    </option>
-                                ))}
-                            </Select>
-                            {resetForm.errors.participant_id && (
-                                <p className="text-xs text-rose-600 dark:text-rose-400">{resetForm.errors.participant_id}</p>
-                            )}
-                            <div className="flex gap-2">
-                                <Button
-                                    type="submit"
-                                    variant="danger"
-                                    disabled={resetForm.processing || !resetForm.data.participant_id}
+                        {!selectedExamId ? (
+                            <Alert tone="info">Pilih ujian terlebih dahulu.</Alert>
+                        ) : !confirmReset ? (
+                            <Button variant="danger" className="w-full" onClick={() => setConfirmReset(true)}>
+                                Pilih Peserta untuk Direset
+                            </Button>
+                        ) : (
+                            <form onSubmit={submitReset} className="space-y-3">
+                                <Alert tone="error">
+                                    Tindakan ini menghapus jawaban dan nilai peserta. Tidak dapat dibatalkan.
+                                </Alert>
+                                <Select
+                                    value={resetForm.data.participant_id}
+                                    onChange={(event) => resetForm.setData('participant_id', event.target.value)}
+                                    required
                                 >
-                                    Reset Sekarang
-                                </Button>
-                                <Button type="button" variant="secondary" onClick={() => setConfirmReset(false)}>
-                                    Batal
-                                </Button>
-                            </div>
-                        </form>
-                    )}
-                </Card>
+                                    <option value="">Pilih peserta...</option>
+                                    {participants.map((participant) => (
+                                        <option key={participant.id} value={participant.id}>
+                                            {participant.exam_number} — {participant.full_name}
+                                        </option>
+                                    ))}
+                                </Select>
+                                {resetForm.errors.participant_id && (
+                                    <p className="text-xs text-rose-600 dark:text-rose-400">{resetForm.errors.participant_id}</p>
+                                )}
+                                <div className="flex gap-2">
+                                    <Button
+                                        type="submit"
+                                        variant="danger"
+                                        disabled={resetForm.processing || !resetForm.data.participant_id}
+                                    >
+                                        Reset Sekarang
+                                    </Button>
+                                    <Button type="button" variant="secondary" onClick={() => setConfirmReset(false)}>
+                                        Batal
+                                    </Button>
+                                </div>
+                            </form>
+                        )}
+                    </Card>
+                )}
             </div>
         </AdminLayout>
     );

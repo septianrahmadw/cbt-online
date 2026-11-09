@@ -1,9 +1,10 @@
-import { router, usePoll } from '@inertiajs/react';
+import { router, usePage, usePoll } from '@inertiajs/react';
 import { Activity, Ban, CheckCircle2, Clock, RefreshCw, Square, Trash2, Users } from 'lucide-react';
 import { useMemo, useState } from 'react';
 import { Badge, Button, Card, EmptyState, Modal } from '../../components/ui';
 import { AdminLayout } from '../../layouts/AdminLayout';
 import { cn, formatDuration } from '../../lib/utils';
+import type { SharedProps } from '../../types/shared';
 
 interface SessionParticipant {
     id: number;
@@ -63,6 +64,8 @@ function formatStartTime(value: string | null): string {
 }
 
 export default function Sessions({ sessions }: { sessions: SessionRow[]; serverTime: string }) {
+    const { auth } = usePage<SharedProps>().props;
+    const isAdmin = auth?.user?.role === 'admin';
     const [tab, setTab] = useState<'active' | 'inactive'>('active');
     const [stopTarget, setStopTarget] = useState<StopTarget | null>(null);
     const [processing, setProcessing] = useState(false);
@@ -284,9 +287,11 @@ export default function Sessions({ sessions }: { sessions: SessionRow[]; serverT
                         <Button variant="ghost" size="sm" onClick={() => setStopTarget(null)} disabled={processing}>
                             Batal
                         </Button>
-                        <Button variant="danger" size="sm" onClick={() => confirmStop('delete')} disabled={processing}>
-                            <Trash2 size={14} /> Hapus (tanpa nilai)
-                        </Button>
+                        {isAdmin && (
+                            <Button variant="danger" size="sm" onClick={() => confirmStop('delete')} disabled={processing}>
+                                <Trash2 size={14} /> Hapus (tanpa nilai)
+                            </Button>
+                        )}
                         <Button variant="success" size="sm" onClick={() => confirmStop('submit')} disabled={processing}>
                             <CheckCircle2 size={14} /> Paksa submit &amp; nilai
                         </Button>
@@ -307,13 +312,15 @@ export default function Sessions({ sessions }: { sessions: SessionRow[]; serverT
                                 Sesi ditandai <em>forced_submit</em>.
                             </span>
                         </li>
-                        <li className="flex items-start gap-2 rounded-lg border border-rose-200 bg-rose-50 p-2 dark:border-rose-500/30 dark:bg-rose-500/10">
-                            <Trash2 size={14} className="mt-0.5 shrink-0 text-rose-600 dark:text-rose-400" />
-                            <span>
-                                <strong>Hapus (tanpa nilai)</strong> — sesi, jawaban, dan log pelanggaran dihapus
-                                permanen. Peserta dapat login kembali jika ujian masih dibuka.
-                            </span>
-                        </li>
+                        {isAdmin && (
+                            <li className="flex items-start gap-2 rounded-lg border border-rose-200 bg-rose-50 p-2 dark:border-rose-500/30 dark:bg-rose-500/10">
+                                <Trash2 size={14} className="mt-0.5 shrink-0 text-rose-600 dark:text-rose-400" />
+                                <span>
+                                    <strong>Hapus (tanpa nilai)</strong> — sesi, jawaban, dan log pelanggaran dihapus
+                                    permanen. Peserta dapat login kembali jika ujian masih dibuka.
+                                </span>
+                            </li>
+                        )}
                     </ul>
                     {stopTarget && stopTarget.sessionCount > 1 && (
                         <p className="flex items-center gap-1.5 text-xs font-medium text-amber-600 dark:text-amber-400">
