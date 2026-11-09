@@ -79,4 +79,19 @@ class ExamSession extends Model
 
         return max(0, (int) floor($remaining));
     }
+
+    public function hasExpired(): bool
+    {
+        if ($this->is_completed) {
+            return true;
+        }
+
+        if ($this->secondsRemaining() <= 0) {
+            return true;
+        }
+
+        $examEndDate = $this->exam?->exam_end_date;
+
+        return $examEndDate !== null && now()->greaterThan($examEndDate);
+    }
 }

@@ -8,6 +8,7 @@ import { CountdownTimer } from '../../components/cbt/CountdownTimer';
 import { QuestionNavigator } from '../../components/cbt/QuestionNavigator';
 import { Alert, Badge, Button, Modal } from '../../components/ui';
 import { useAntiCheat, type ViolationType } from '../../hooks/useAntiCheat';
+import { enterFullscreen, exitFullscreen, fullscreenSupported, unlockKeyboard } from '../../lib/fullscreen';
 import { csrfToken } from '../../lib/utils';
 import type { SharedProps } from '../../types/shared';
 
@@ -57,6 +58,7 @@ export default function Workspace({
     participant,
     questions: initialQuestions,
     examEndsAt,
+    serverTime,
 }: WorkspaceProps) {
     const violationLimit = violationSettings.limit;
     const { institution } = usePage<SharedProps>().props;
@@ -68,6 +70,7 @@ export default function Workspace({
     const [started, setStarted] = useState(false);
     const [submitting, setSubmitting] = useState(false);
     const [submitOpen, setSubmitOpen] = useState(false);
+    const [fullscreenLost, setFullscreenLost] = useState(false);
     const [violations, setViolations] = useState(session.violations_count);
     const [violation, setViolation] = useState<ViolationState>({
         open: false,
@@ -82,8 +85,79 @@ export default function Workspace({
     questionsRef.current = questions;
     submittingRef.current = submitting;
 
+    const leaveExam = async (url: string | null | undefined) => {
+        await exitFullscreen();
+        window.location.href = url ?? '/exam/result';
+    };
+
+    useEffect(() => {
+        if (!started || submitting) {
+            return;
+        }
+
+        let cancelled = false;
+
+        const check = async () => {
+            try {
+                const response = await fetch('/exam/heartbeat', {
+                    headers: { Accept: 'application/json' },
+                });
+
+                if (response.status === 409) {
+                    const data = (await response.json().catch(() => null)) as { redirect?: string } | null;
+
+                    if (!cancelled) {
+                        void leaveExam(data?.redirect ?? '/exam/result');
+                    }
+                }
+            } catch {
+                // Offline: jawaban tetap disimpan lokal.
+            }
+        };
+
+        const interval = window.setInterval(check, 10_000);
+        const handleVisibility = () => {
+            if (!document.hidden) {
+                void check();
+            }
+        };
+
+        document.addEventListener('visibilitychange', handleVisibility);
+
+        return () => {
+            cancelled = true;
+            window.clearInterval(interval);
+            document.removeEventListener('visibilitychange', handleVisibility);
+        };
+        // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [started, submitting]);
+
+    useEffect(() => {
+        if (!started) {
+            return;
+        }
+
+        const handleFullscreenChange = () => {
+            if (submittingRef.current) {
+                return;
+            }
+
+            if (document.fullscreenElement) {
+                setFullscreenLost(false);
+            } else if (fullscreenSupported()) {
+                setFullscreenLost(true);
+            }
+        };
+
+        document.addEventListener('fullscreenchange', handleFullscreenChange);
+
+        return () => document.removeEventListener('fullscreenchange', handleFullscreenChange);
+    }, [started]);
+
+    useEffect(() => () => unlockKeyboard(), []);
+
     const secondsToWindowEnd = examEndsAt
-        ? Math.max(0, Math.floor((new Date(examEndsAt).getTime() - Date.now()) / 1000))
+        ? Math.max(0, Math.floor((new Date(examEndsAt).getTime() - new Date(serverTime).getTime()) / 1000))
         : Number.POSITIVE_INFINITY;
     const countdownSeconds = Math.min(session.remaining_seconds, secondsToWindowEnd);
 
@@ -182,9 +256,7 @@ export default function Workspace({
         if (response.status === 409) {
             const data = (await response.json().catch(() => null)) as { redirect?: string } | null;
 
-            if (data?.redirect) {
-                window.location.href = data.redirect;
-            }
+            await leaveExam(data?.redirect);
 
             throw new Error('Sesi ujian telah berakhir');
         }
@@ -236,6 +308,21 @@ export default function Workspace({
         setConnection(results.every((result) => result.status === 'fulfilled') ? 'saved' : 'offline');
     };
 
+    useEffect(() => {
+        if (!started || connection !== 'offline') {
+            return;
+        }
+
+        const interval = window.setInterval(() => {
+            if (navigator.onLine) {
+                void syncAll();
+            }
+        }, 15_000);
+
+        return () => window.clearInterval(interval);
+        // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [started, connection]);
+
     const selectOption = (question: Question, optionId: number) => {
         const answer = { ...question.answer, selected_option_id: optionId };
         updateAnswer(question.id, answer);
@@ -267,7 +354,7 @@ export default function Workspace({
                 body: JSON.stringify({}),
             });
             const data = (await response.json().catch(() => null)) as { redirect?: string } | null;
-            window.location.href = data?.redirect ?? '/exam/result';
+            await leaveExam(data?.redirect ?? '/exam/result');
         } catch {
             setSubmitting(false);
             setSubmitOpen(true);
@@ -296,8 +383,13 @@ export default function Workspace({
                         'Batas pelanggaran terlampaui. Ujian dihentikan otomatis dan jawaban Anda telah dikirim.',
                 });
                 window.setTimeout(() => {
-                    window.location.href = data.redirect ?? '/exam/result';
+                    void leaveExam(data.redirect ?? '/exam/result');
                 }, 3000);
+                return;
+            }
+
+            if (type === 'fullscreen_exit') {
+                setFullscreenLost(true);
                 return;
             }
 
@@ -313,6 +405,12 @@ export default function Workspace({
         } catch {
             const nextCount = violations + 1;
             setViolations(nextCount);
+
+            if (type === 'fullscreen_exit') {
+                setFullscreenLost(true);
+                return;
+            }
+
             setViolation({
                 open: true,
                 forced: false,
@@ -325,21 +423,21 @@ export default function Workspace({
     useAntiCheat(started && !submitting, handleViolation);
 
     const startExam = async () => {
-        try {
-            await document.documentElement.requestFullscreen?.();
-        } catch {
-            // Fullscreen dapat ditolak browser; ujian tetap boleh dilanjutkan.
-        }
-
+        const ok = await enterFullscreen();
         setStarted(true);
+
+        if (!ok && fullscreenSupported()) {
+            setFullscreenLost(true);
+        }
     };
 
     const reenterFullscreen = async () => {
-        try {
-            await document.documentElement.requestFullscreen?.();
-        } catch {
-            // abaikan
+        const ok = await enterFullscreen();
+
+        if (ok || !fullscreenSupported()) {
+            setFullscreenLost(false);
         }
+
         setViolation((previous) => ({ ...previous, open: false }));
     };
 
@@ -521,6 +619,31 @@ export default function Workspace({
                         </div>
                         <Button className="mt-5 w-full" size="lg" onClick={startExam}>
                             <Expand size={18} /> Mulai Ujian (Layar Penuh)
+                        </Button>
+                    </div>
+                </div>
+            )}
+
+            {started && !submitting && fullscreenLost && (
+                <div
+                    className="fixed inset-0 z-[60] flex items-center justify-center bg-slate-950/90 p-4 backdrop-blur-sm"
+                    role="alertdialog"
+                    aria-modal="true"
+                    aria-label="Mode layar penuh wajib aktif"
+                >
+                    <div className="w-full max-w-md rounded-2xl border border-slate-200 bg-white p-6 text-center shadow-2xl dark:border-slate-700 dark:bg-slate-900">
+                        <div className="mx-auto mb-4 flex h-14 w-14 items-center justify-center rounded-full bg-rose-100 text-rose-600 dark:bg-rose-500/20 dark:text-rose-300">
+                            <Expand size={28} />
+                        </div>
+                        <h2 className="text-lg font-semibold text-slate-900 dark:text-white">
+                            Mode Layar Penuh Wajib Aktif
+                        </h2>
+                        <p className="mt-2 text-sm text-slate-500 dark:text-slate-400">
+                            Anda terdeteksi keluar dari mode layar penuh. Kembali ke layar penuh untuk melanjutkan
+                            ujian. Aktivitas ini tercatat sebagai pelanggaran.
+                        </p>
+                        <Button className="mt-5 w-full" size="lg" onClick={reenterFullscreen}>
+                            <Expand size={18} /> Kembali ke Layar Penuh
                         </Button>
                     </div>
                 </div>

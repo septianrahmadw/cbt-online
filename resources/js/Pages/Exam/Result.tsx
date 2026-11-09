@@ -1,6 +1,6 @@
 import { router, usePage } from '@inertiajs/react';
-import { CheckCircle2, LogOut, Printer, XCircle } from 'lucide-react';
-import { Badge, Button } from '../../components/ui';
+import { AlertTriangle, CheckCircle2, LogOut, Printer, XCircle } from 'lucide-react';
+import { Alert, Badge, Button } from '../../components/ui';
 import { ExamLayout } from '../../layouts/ExamLayout';
 import type { SharedProps } from '../../types/shared';
 
@@ -15,16 +15,31 @@ interface ResultProps {
     };
     exam: { id: number; title: string; subject_name: string; passing_grade: number };
     participant: { id: number; exam_number: string; full_name: string; class_name: string | null };
+    sessionStatus: string | null;
 }
 
-export default function Result({ result, exam, participant }: ResultProps) {
+export default function Result({ result, exam, participant, sessionStatus }: ResultProps) {
     const { institution } = usePage<SharedProps>().props;
     const passed = result.passing_status === 'lulus';
+    const forced = sessionStatus === 'forced_submit';
 
     return (
         <ExamLayout>
             <div className="w-full print-area">
                 <div className="card p-6 print:border-0 print:bg-white print:text-black">
+                    {forced && (
+                        <div className="mb-5 no-print">
+                            <Alert tone="info">
+                                <span className="flex items-start gap-2">
+                                    <AlertTriangle size={16} className="mt-0.5 shrink-0 text-amber-500 dark:text-amber-400" />
+                                    <span>
+                                        Ujian dihentikan otomatis karena waktu habis. Jawaban yang tersimpan telah
+                                        dinilai.
+                                    </span>
+                                </span>
+                            </Alert>
+                        </div>
+                    )}
                     <div className="mb-6 text-center">
                         <p className="text-xs uppercase tracking-wide text-slate-500 print:text-black dark:text-slate-400">
                             {institution?.school_name}

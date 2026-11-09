@@ -269,6 +269,8 @@ class ExamFlowTest extends TestCase
         $this->get('/exam/workspace')->assertRedirect('/exam/result');
 
         $this->assertSame('forced_submit', ExamSession::firstOrFail()->status);
+
+        $this->get('/exam/result')->assertOk();
     }
 
     public function test_global_violation_limit_is_enforced(): void
@@ -502,5 +504,100 @@ class ExamFlowTest extends TestCase
         }
 
         $this->postJson('/exam/check-number', ['exam_number' => '2026001'])->assertStatus(429);
+    }
+
+    public function test_answer_after_session_duration_expires_is_force_submitted(): void
+    {
+        $this->post('/exam/login', [
+            'exam_number' => '2026001',
+            'full_name' => 'Budi Santoso',
+        ])->assertRedirect('/exam/confirm');
+        $this->post('/exam/start', ['exam_id' => $this->exam->id])->assertRedirect('/exam/workspace');
+
+        $this->travel(61)->minutes();
+
+        $this->postJson('/exam/answer', [
+            'question_id' => $this->question->id,
+            'selected_option_id' => $this->correctOption->id,
+        ])->assertStatus(409)->assertJsonPath('redirect', route('exam.result'));
+
+        $session = ExamSession::firstOrFail();
+
+        $this->assertSame('forced_submit', $session->status);
+        $this->assertDatabaseHas('exam_results', ['session_id' => $session->id]);
+
+        $this->get('/exam/result')
+            ->assertOk()
+            ->assertInertia(fn (Assert $page) => $page
+                ->component('Exam/Result')
+                ->where('sessionStatus', 'forced_submit')
+            );
+    }
+
+    public function test_workspace_redirects_after_session_duration_expires(): void
+    {
+        $this->post('/exam/login', [
+            'exam_number' => '2026001',
+            'full_name' => 'Budi Santoso',
+        ])->assertRedirect('/exam/confirm');
+        $this->post('/exam/start', ['exam_id' => $this->exam->id])->assertRedirect('/exam/workspace');
+
+        $this->travel(61)->minutes();
+
+        $this->get('/exam/workspace')->assertRedirect('/exam/result');
+
+        $this->assertSame('forced_submit', ExamSession::firstOrFail()->status);
+    }
+
+    public function test_heartbeat_reports_active_then_forces_submit_after_expiry(): void
+    {
+        $this->post('/exam/login', [
+            'exam_number' => '2026001',
+            'full_name' => 'Budi Santoso',
+        ])->assertRedirect('/exam/confirm');
+        $this->post('/exam/start', ['exam_id' => $this->exam->id])->assertRedirect('/exam/workspace');
+
+        $this->getJson('/exam/heartbeat')->assertOk()->assertJson(['ok' => true]);
+
+        $this->travel(61)->minutes();
+
+        $this->getJson('/exam/heartbeat')
+            ->assertStatus(409)
+            ->assertJsonPath('redirect', route('exam.result'));
+
+        $this->assertSame('forced_submit', ExamSession::firstOrFail()->status);
+        $this->assertDatabaseCount('exam_results', 1);
+    }
+
+    public function test_sweep_command_force_submits_expired_sessions(): void
+    {
+        $this->post('/exam/login', [
+            'exam_number' => '2026001',
+            'full_name' => 'Budi Santoso',
+        ])->assertRedirect('/exam/confirm');
+        $this->post('/exam/start', ['exam_id' => $this->exam->id])->assertRedirect('/exam/workspace');
+
+        $session = ExamSession::firstOrFail();
+
+        $this->travel(61)->minutes();
+
+        $this->artisan('exam:sweep-expired')->assertSuccessful();
+
+        $this->assertSame('forced_submit', $session->fresh()->status);
+        $this->assertDatabaseHas('exam_results', ['session_id' => $session->id]);
+    }
+
+    public function test_sweep_command_ignores_active_sessions(): void
+    {
+        $this->post('/exam/login', [
+            'exam_number' => '2026001',
+            'full_name' => 'Budi Santoso',
+        ])->assertRedirect('/exam/confirm');
+        $this->post('/exam/start', ['exam_id' => $this->exam->id])->assertRedirect('/exam/workspace');
+
+        $this->artisan('exam:sweep-expired')->assertSuccessful();
+
+        $this->assertSame('active', ExamSession::firstOrFail()->status);
+        $this->assertDatabaseCount('exam_results', 0);
     }
 }

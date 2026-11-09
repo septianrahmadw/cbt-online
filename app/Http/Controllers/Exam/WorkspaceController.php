@@ -22,7 +22,7 @@ class WorkspaceController extends Controller
         /** @var ExamSession $session */
         $session = $request->attributes->get('examSession');
 
-        if ($session->secondsRemaining() <= 0) {
+        if ($session->hasExpired()) {
             app(ExamService::class)->submit($session, true);
 
             return redirect()->route('exam.result');
@@ -76,6 +76,19 @@ class WorkspaceController extends Controller
             'participant' => $session->participant->only(['id', 'exam_number', 'full_name', 'class_name']),
             'questions' => $questions,
             'serverTime' => now()->toIso8601String(),
+        ]);
+    }
+
+    public function heartbeat(Request $request): JsonResponse
+    {
+        /** @var ExamSession $session */
+        $session = $request->attributes->get('examSession');
+
+        return response()->json([
+            'ok' => true,
+            'remaining_seconds' => $session->secondsRemaining(),
+            'exam_ends_at' => $session->exam?->exam_end_date?->toIso8601String(),
+            'server_time' => now()->toIso8601String(),
         ]);
     }
 

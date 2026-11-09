@@ -4,6 +4,7 @@ namespace App\Http\Controllers\Exam;
 
 use App\Http\Controllers\Controller;
 use App\Models\ExamResult;
+use App\Models\ExamSession;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Inertia\Inertia;
@@ -38,6 +39,7 @@ class ResultController extends Controller
             ],
             'exam' => $result->exam->only(['id', 'title', 'subject_name', 'passing_grade']),
             'participant' => $result->participant->only(['id', 'exam_number', 'full_name', 'class_name']),
+            'sessionStatus' => ExamSession::whereKey($sessionId)->value('status'),
         ]);
     }
 }

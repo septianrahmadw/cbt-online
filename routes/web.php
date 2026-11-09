@@ -95,6 +95,7 @@ Route::prefix('exam')->name('exam.')->group(function () {
 
     Route::middleware('participant')->group(function () {
         Route::get('workspace', [WorkspaceController::class, 'index'])->name('workspace');
+        Route::get('heartbeat', [WorkspaceController::class, 'heartbeat'])->name('heartbeat');
         Route::post('answer', [WorkspaceController::class, 'answer'])->name('answer');
         Route::post('violation', [WorkspaceController::class, 'violation'])->name('violation');
         Route::post('submit', [WorkspaceController::class, 'submit'])->name('submit');

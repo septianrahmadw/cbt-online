@@ -15,7 +15,7 @@ class EnsureParticipant
         $sessionId = $request->session()->get('exam_session_id');
 
         if (! $sessionId) {
-            return redirect()->route('exam.login');
+            return $this->unauthenticated($request);
         }
 
         $examSession = ExamSession::with(['exam', 'participant'])->find($sessionId);
@@ -23,28 +23,13 @@ class EnsureParticipant
         if (! $examSession) {
             $request->session()->forget('exam_session_id');
 
-            return redirect()->route('exam.login');
+            return $this->unauthenticated($request);
         }
 
         if ($examSession->is_completed) {
-            return redirect()->route('exam.result');
-        }
-
-        if (! $examSession->isActive()) {
-            $request->session()->forget('exam_session_id');
-
-            return redirect()->route('exam.login');
-        }
-
-        $examEndDate = $examSession->exam?->exam_end_date;
-
-        if ($examEndDate !== null && now()->greaterThan($examEndDate)) {
-            app(ExamService::class)->submit($examSession, true);
-            $request->session()->forget('exam_session_id');
-
             if ($request->expectsJson()) {
                 return response()->json([
-                    'message' => 'Waktu ujian telah berakhir. Jawaban Anda telah dikirim otomatis.',
+                    'message' => 'Ujian sudah selesai.',
                     'redirect' => route('exam.result'),
                 ], 409);
             }
@@ -52,8 +37,52 @@ class EnsureParticipant
             return redirect()->route('exam.result');
         }
 
+        if (! $examSession->isActive()) {
+            $request->session()->forget('exam_session_id');
+
+            return $this->unauthenticated($request);
+        }
+
+        if ($examSession->hasExpired()) {
+            app(ExamService::class)->submit($examSession, true);
+
+            $message = $this->expiryMessage($examSession);
+
+            if ($request->expectsJson()) {
+                return response()->json([
+                    'message' => $message,
+                    'redirect' => route('exam.result'),
+                ], 409);
+            }
+
+            return redirect()->route('exam.result')->with('error', $message);
+        }
+
         $request->attributes->set('examSession', $examSession);
 
         return $next($request);
+    }
+
+    private function expiryMessage(ExamSession $examSession): string
+    {
+        $examEndDate = $examSession->exam?->exam_end_date;
+
+        if ($examEndDate !== null && now()->greaterThan($examEndDate)) {
+            return 'Waktu ujian telah berakhir. Jawaban Anda telah dikirim otomatis.';
+        }
+
+        return 'Waktu sesi ujian Anda telah berakhir. Jawaban Anda telah dikirim otomatis.';
+    }
+
+    private function unauthenticated(Request $request): Response
+    {
+        if ($request->expectsJson()) {
+            return response()->json([
+                'message' => 'Sesi ujian tidak ditemukan.',
+                'redirect' => route('exam.login'),
+            ], 409);
+        }
+
+        return redirect()->route('exam.login');
     }
 }
