@@ -1,7 +1,10 @@
 import { Link, useForm } from '@inertiajs/react';
 import { ArrowLeft, Save } from 'lucide-react';
+import { useState } from 'react';
 import { AdminLayout } from '../../../layouts/AdminLayout';
 import { Button, Card, Input, Label, Select } from '../../../components/ui';
+import { DateTimeField } from '../../../components/DateTimeField';
+import { addMinutes, nowLocalInput, todayAt } from '../../../lib/datetime';
 
 interface ExamCategoryOption {
     id: number;
@@ -72,6 +75,56 @@ export default function ExamForm({
                 : [...form.data[field], id],
         );
     };
+
+    const [autoSyncEnd, setAutoSyncEnd] = useState(!exam || !exam.exam_end_date);
+
+    const updateStart = (value: string) => {
+        form.setData('exam_date', value);
+
+        if (autoSyncEnd && value) {
+            form.setData('exam_end_date', addMinutes(value, form.data.duration_minutes));
+        }
+    };
+
+    const updateDuration = (value: number) => {
+        form.setData('duration_minutes', value);
+
+        if (autoSyncEnd && form.data.exam_date && value > 0) {
+            form.setData('exam_end_date', addMinutes(form.data.exam_date, value));
+        }
+    };
+
+    const updateEnd = (value: string) => {
+        form.setData('exam_end_date', value);
+
+        if (autoSyncEnd) {
+            setAutoSyncEnd(false);
+        }
+    };
+
+    const toggleAutoSync = (checked: boolean) => {
+        setAutoSyncEnd(checked);
+
+        if (checked && form.data.exam_date) {
+            form.setData('exam_end_date', addMinutes(form.data.exam_date, form.data.duration_minutes));
+        }
+    };
+
+    const endBeforeStart =
+        form.data.exam_date !== '' &&
+        form.data.exam_end_date !== '' &&
+        form.data.exam_end_date < form.data.exam_date;
+
+    const quickButton = (label: string, onClick: () => void) => (
+        <button
+            key={label}
+            type="button"
+            onClick={onClick}
+            className="rounded-lg border border-slate-200 bg-white px-2.5 py-1 text-xs font-medium text-slate-600 transition hover:bg-slate-50 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-300 dark:hover:bg-slate-800"
+        >
+            {label}
+        </button>
+    );
 
     const submit = (event: React.FormEvent) => {
         event.preventDefault();
@@ -145,7 +198,7 @@ export default function ExamForm({
                                 min={1}
                                 max={600}
                                 value={form.data.duration_minutes}
-                                onChange={(event) => form.setData('duration_minutes', Number(event.target.value))}
+                                onChange={(event) => updateDuration(Number(event.target.value))}
                             />
                             {form.errors.duration_minutes && (
                                 <p className="mt-1 text-xs text-rose-600 dark:text-rose-400">{form.errors.duration_minutes}</p>
@@ -167,42 +220,73 @@ export default function ExamForm({
                         </div>
                     </div>
 
-                    <div className="grid gap-4 sm:grid-cols-2">
+                    <div className="space-y-4 rounded-xl border border-slate-200 p-4 dark:border-slate-800">
                         <div>
-                            <Label htmlFor="exam_date">
-                                Tanggal & Waktu Mulai <span className="text-rose-500">*</span>
-                            </Label>
-                            <Input
+                            <h3 className="text-sm font-semibold text-slate-900 dark:text-white">Jadwal Ujian</h3>
+                            <p className="mt-1 text-xs text-slate-500 dark:text-slate-400">
+                                Ujian hanya bisa diakses dalam rentang waktu ini. Saat waktu selesai tercapai, sesi
+                                yang sedang berjalan dipaksa submit otomatis.
+                            </p>
+                        </div>
+
+                        <div className="grid gap-4 sm:grid-cols-2">
+                            <DateTimeField
                                 id="exam_date"
-                                type="datetime-local"
+                                label="Tanggal & Waktu Mulai"
                                 value={form.data.exam_date}
-                                onChange={(event) => form.setData('exam_date', event.target.value)}
+                                onChange={updateStart}
+                                error={form.errors.exam_date}
                                 required
+                                footer={
+                                    <>
+                                        {quickButton('Sekarang', () => updateStart(nowLocalInput()))}
+                                        {quickButton('Hari ini 08:00', () => updateStart(todayAt(8)))}
+                                        {quickButton('Besok 08:00', () => updateStart(todayAt(8, 0, 1)))}
+                                    </>
+                                }
                             />
-                            {form.errors.exam_date && (
-                                <p className="mt-1 text-xs text-rose-600 dark:text-rose-400">{form.errors.exam_date}</p>
-                            )}
-                        </div>
-                        <div>
-                            <Label htmlFor="exam_end_date">
-                                Tanggal & Waktu Selesai <span className="text-rose-500">*</span>
-                            </Label>
-                            <Input
+                            <DateTimeField
                                 id="exam_end_date"
-                                type="datetime-local"
+                                label="Tanggal & Waktu Selesai"
                                 value={form.data.exam_end_date}
-                                onChange={(event) => form.setData('exam_end_date', event.target.value)}
+                                onChange={updateEnd}
+                                error={form.errors.exam_end_date}
                                 required
+                                footer={
+                                    <>
+                                        {quickButton('Samakan dengan mulai', () => updateEnd(form.data.exam_date))}
+                                        {quickButton('Mulai + durasi', () =>
+                                            updateEnd(addMinutes(form.data.exam_date, form.data.duration_minutes)),
+                                        )}
+                                        {quickButton('+1 hari', () =>
+                                            updateEnd(
+                                                addMinutes(
+                                                    form.data.exam_end_date || form.data.exam_date,
+                                                    24 * 60,
+                                                ),
+                                            ),
+                                        )}
+                                    </>
+                                }
                             />
-                            {form.errors.exam_end_date && (
-                                <p className="mt-1 text-xs text-rose-600 dark:text-rose-400">{form.errors.exam_end_date}</p>
-                            )}
                         </div>
+
+                        <label className="flex items-center gap-2 text-sm text-slate-700 dark:text-slate-300">
+                            <input
+                                type="checkbox"
+                                checked={autoSyncEnd}
+                                onChange={(event) => toggleAutoSync(event.target.checked)}
+                                className="h-4 w-4 rounded border-slate-300 bg-white text-brand-600 focus:ring-brand-500 dark:border-slate-600 dark:bg-slate-950"
+                            />
+                            Hitung waktu selesai otomatis dari durasi ({form.data.duration_minutes} menit)
+                        </label>
+
+                        {endBeforeStart && (
+                            <p className="text-xs text-rose-600 dark:text-rose-400">
+                                Waktu selesai harus setelah waktu mulai.
+                            </p>
+                        )}
                     </div>
-                    <p className="-mt-2 text-xs text-slate-500 dark:text-slate-400">
-                        Ujian hanya bisa diakses dalam rentang waktu ini. Saat waktu selesai tercapai, sesi yang
-                        sedang berjalan dipaksa submit otomatis.
-                    </p>
 
                     <div className="rounded-xl border border-slate-200 p-4 dark:border-slate-800">
                         <h3 className="text-sm font-semibold text-slate-900 dark:text-white">Pelanggaran</h3>
