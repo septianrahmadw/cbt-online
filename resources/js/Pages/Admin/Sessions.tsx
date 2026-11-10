@@ -2,6 +2,7 @@ import { router, usePage, usePoll } from '@inertiajs/react';
 import { Activity, Ban, CheckCircle2, Clock, RefreshCw, Square, Trash2, Users } from 'lucide-react';
 import { useMemo, useState } from 'react';
 import { Badge, Button, Card, EmptyState, Modal } from '../../components/ui';
+import { useCountdown } from '../../hooks/useCountdown';
 import { AdminLayout } from '../../layouts/AdminLayout';
 import { cn, formatDuration } from '../../lib/utils';
 import type { SharedProps } from '../../types/shared';
@@ -61,6 +62,25 @@ function formatStartTime(value: string | null): string {
     }
 
     return new Date(value).toLocaleTimeString('id-ID', { hour: '2-digit', minute: '2-digit' });
+}
+
+function SessionTimer({ remainingSeconds }: { remainingSeconds: number }) {
+    const remaining = useCountdown(remainingSeconds);
+    const urgent = remaining <= 300;
+
+    return (
+        <div className="flex items-center gap-2 lg:w-28">
+            <Clock size={14} className={urgent ? 'text-rose-500' : 'text-slate-400'} />
+            <span
+                className={cn(
+                    'font-mono text-sm font-semibold tabular-nums',
+                    urgent ? 'text-rose-600 dark:text-rose-400' : 'text-slate-700 dark:text-slate-200',
+                )}
+            >
+                {formatDuration(remaining)}
+            </span>
+        </div>
+    );
 }
 
 export default function Sessions({ sessions }: { sessions: SessionRow[]; serverTime: string }) {
@@ -154,7 +174,6 @@ export default function Sessions({ sessions }: { sessions: SessionRow[]; serverT
                     const progress = session.total_questions > 0
                         ? Math.round((session.answered_count / session.total_questions) * 100)
                         : 0;
-                    const urgent = session.remaining_seconds <= 300;
 
                     return (
                         <li key={session.id} className="flex flex-col gap-3 px-4 py-3 lg:flex-row lg:items-center lg:gap-4">
@@ -185,17 +204,7 @@ export default function Sessions({ sessions }: { sessions: SessionRow[]; serverT
                                 </div>
                             </div>
 
-                            <div className="flex items-center gap-2 lg:w-28">
-                                <Clock size={14} className={urgent ? 'text-rose-500' : 'text-slate-400'} />
-                                <span
-                                    className={cn(
-                                        'font-mono text-sm font-semibold tabular-nums',
-                                        urgent ? 'text-rose-600 dark:text-rose-400' : 'text-slate-700 dark:text-slate-200',
-                                    )}
-                                >
-                                    {formatDuration(session.remaining_seconds)}
-                                </span>
-                            </div>
+                            <SessionTimer remainingSeconds={session.remaining_seconds} />
 
                             <div className="lg:w-40">
                                 <Badge tone={session.violations_count > 0 ? 'red' : 'slate'}>

@@ -1,5 +1,5 @@
-import { useEffect, useRef, useState } from 'react';
 import { Clock } from 'lucide-react';
+import { useCountdown } from '../../hooks/useCountdown';
 import { cn, formatDuration } from '../../lib/utils';
 
 export function CountdownTimer({
@@ -9,36 +9,7 @@ export function CountdownTimer({
     initialSeconds: number;
     onExpire: () => void;
 }) {
-    const deadline = useRef(Date.now() + initialSeconds * 1000);
-    const expired = useRef(false);
-    const onExpireRef = useRef(onExpire);
-    const [remaining, setRemaining] = useState(initialSeconds);
-
-    onExpireRef.current = onExpire;
-
-    useEffect(() => {
-        deadline.current = Date.now() + initialSeconds * 1000;
-        expired.current = false;
-        setRemaining(initialSeconds);
-    }, [initialSeconds]);
-
-    useEffect(() => {
-        const tick = () => {
-            const value = Math.max(0, Math.ceil((deadline.current - Date.now()) / 1000));
-            setRemaining(value);
-
-            if (value <= 0 && !expired.current) {
-                expired.current = true;
-                onExpireRef.current();
-            }
-        };
-
-        tick();
-        const interval = window.setInterval(tick, 1000);
-
-        return () => window.clearInterval(interval);
-    }, []);
-
+    const remaining = useCountdown(initialSeconds, onExpire);
     const urgent = remaining <= 300;
 
     return (

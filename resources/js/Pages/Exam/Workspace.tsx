@@ -40,8 +40,6 @@ interface WorkspaceProps {
     exam: { id: number; title: string; subject_name: string; duration_minutes: number; passing_grade: number };
     participant: { id: number; exam_number: string; full_name: string; class_name: string | null };
     questions: Question[];
-    serverTime: string;
-    examEndsAt?: string | null;
 }
 
 interface ViolationState {
@@ -57,8 +55,6 @@ export default function Workspace({
     exam,
     participant,
     questions: initialQuestions,
-    examEndsAt,
-    serverTime,
 }: WorkspaceProps) {
     const violationLimit = violationSettings.limit;
     const { institution } = usePage<SharedProps>().props;
@@ -71,6 +67,7 @@ export default function Workspace({
     const [submitting, setSubmitting] = useState(false);
     const [submitOpen, setSubmitOpen] = useState(false);
     const [fullscreenLost, setFullscreenLost] = useState(false);
+    const [remainingSeconds, setRemainingSeconds] = useState(session.remaining_seconds);
     const [violations, setViolations] = useState(session.violations_count);
     const [violation, setViolation] = useState<ViolationState>({
         open: false,
@@ -108,6 +105,16 @@ export default function Workspace({
 
                     if (!cancelled) {
                         void leaveExam(data?.redirect ?? '/exam/result');
+                    }
+
+                    return;
+                }
+
+                if (response.ok) {
+                    const data = (await response.json().catch(() => null)) as { remaining_seconds?: number } | null;
+
+                    if (!cancelled && typeof data?.remaining_seconds === 'number') {
+                        setRemainingSeconds(data.remaining_seconds);
                     }
                 }
             } catch {
@@ -155,11 +162,6 @@ export default function Workspace({
     }, [started]);
 
     useEffect(() => () => unlockKeyboard(), []);
-
-    const secondsToWindowEnd = examEndsAt
-        ? Math.max(0, Math.floor((new Date(examEndsAt).getTime() - new Date(serverTime).getTime()) / 1000))
-        : Number.POSITIVE_INFINITY;
-    const countdownSeconds = Math.min(session.remaining_seconds, secondsToWindowEnd);
 
     const current = questions[currentIndex];
     const answeredCount = useMemo(
@@ -461,7 +463,7 @@ export default function Workspace({
                         )}
                         <div className="text-right">
                             <p className="text-[11px] uppercase tracking-wide text-slate-500 dark:text-slate-400">Sisa waktu</p>
-                            <CountdownTimer initialSeconds={countdownSeconds} onExpire={submitExam} />
+                            <CountdownTimer initialSeconds={remainingSeconds} onExpire={submitExam} />
                         </div>
                         <ThemeToggle />
                         <Button variant="danger" onClick={() => setSubmitOpen(true)} disabled={submitting}>

@@ -24,7 +24,7 @@ class SessionController extends Controller
             ->whereHas('exam', fn ($query) => $query->visibleTo($request->user()))
             ->with([
                 'participant:id,exam_number,full_name,class_name',
-                'exam:id,title,subject_name,is_active,duration_minutes',
+                'exam:id,title,subject_name,is_active,duration_minutes,exam_end_date',
                 'violations' => fn ($query) => $query->latest('occurred_at')->limit(1),
             ])
             ->withCount([

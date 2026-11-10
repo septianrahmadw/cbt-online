@@ -77,21 +77,17 @@ class ExamSession extends Model
         $elapsed = now()->getTimestamp() - $this->start_time->getTimestamp();
         $remaining = ($this->exam->duration_minutes * 60) - max(0, $elapsed);
 
+        $examEndDate = $this->exam?->exam_end_date;
+
+        if ($examEndDate !== null) {
+            $remaining = min($remaining, $examEndDate->getTimestamp() - now()->getTimestamp());
+        }
+
         return max(0, (int) floor($remaining));
     }
 
     public function hasExpired(): bool
     {
-        if ($this->is_completed) {
-            return true;
-        }
-
-        if ($this->secondsRemaining() <= 0) {
-            return true;
-        }
-
-        $examEndDate = $this->exam?->exam_end_date;
-
-        return $examEndDate !== null && now()->greaterThan($examEndDate);
+        return $this->is_completed || $this->secondsRemaining() <= 0;
     }
 }

@@ -71,11 +71,9 @@ class WorkspaceController extends Controller
                 'violations_count' => $session->violations_count,
             ],
             'violationSettings' => $violationSettings,
-            'examEndsAt' => $session->exam->exam_end_date?->toIso8601String(),
             'exam' => $session->exam->only(['id', 'title', 'subject_name', 'duration_minutes', 'passing_grade']),
             'participant' => $session->participant->only(['id', 'exam_number', 'full_name', 'class_name']),
             'questions' => $questions,
-            'serverTime' => now()->toIso8601String(),
         ]);
     }
 
@@ -87,8 +85,6 @@ class WorkspaceController extends Controller
         return response()->json([
             'ok' => true,
             'remaining_seconds' => $session->secondsRemaining(),
-            'exam_ends_at' => $session->exam?->exam_end_date?->toIso8601String(),
-            'server_time' => now()->toIso8601String(),
         ]);
     }
 

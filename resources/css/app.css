@@ -48,6 +48,14 @@
         font-size: 1.05em;
     }
 
+    /* Tailwind v4 menghapus cursor pointer bawaan pada tombol; kembalikan agar
+       semua elemen klikabel menampilkan kursor tangan saat di-hover. */
+    button:not(:disabled),
+    [role='button']:not(:disabled),
+    label:has(input[type='checkbox'], input[type='radio']):not(:has(input:disabled)) {
+        cursor: pointer;
+    }
+
     .katex-display {
         margin: 0.75rem 0;
         overflow-x: auto;
