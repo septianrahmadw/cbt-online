@@ -2,6 +2,7 @@
 
 namespace App\Http\Controllers\Exam;
 
+use App\Events\ExamSessionHeartbeat;
 use App\Http\Controllers\Controller;
 use App\Models\ExamSession;
 use App\Models\ExamSessionQuestion;
@@ -12,6 +13,7 @@ use Illuminate\Http\JsonResponse;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Event;
 use Inertia\Inertia;
 use Inertia\Response;
 
@@ -81,6 +83,12 @@ class WorkspaceController extends Controller
     {
         /** @var ExamSession $session */
         $session = $request->attributes->get('examSession');
+
+        // Load fresh data for broadcast
+        $session->loadMissing('exam');
+
+        // Broadcast heartbeat untuk real-time monitoring
+        Event::dispatch(new ExamSessionHeartbeat($session));
 
         return response()->json([
             'ok' => true,

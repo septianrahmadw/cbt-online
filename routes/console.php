@@ -9,3 +9,8 @@ Artisan::command('inspire', function () {
 })->purpose('Display an inspiring quote');
 
 Schedule::command('exam:sweep-expired')->everyMinute()->withoutOverlapping();
+
+// Kirim notifikasi ujian akan dimulai setiap menit (cek ujian yang mulai dalam 15 menit)
+Schedule::command('exam:notify-starting-soon', ['--minutes' => 15])
+    ->everyMinute()
+    ->withoutOverlapping();

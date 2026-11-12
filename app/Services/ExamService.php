@@ -2,6 +2,9 @@
 
 namespace App\Services;
 
+use App\Events\ExamSessionStarted;
+use App\Events\ExamSessionSubmitted;
+use App\Events\ExamSessionViolation;
 use App\Models\AuditLog;
 use App\Models\Exam;
 use App\Models\ExamResult;
@@ -12,6 +15,7 @@ use App\Models\User;
 use App\Models\ViolationLog;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Event;
 use Illuminate\Support\Str;
 use RuntimeException;
 
@@ -87,7 +91,12 @@ class ExamService
             return $session;
         });
 
-        return $session->load(['exam', 'participant', 'sessionQuestions.question.options', 'answers']);
+        $session = $session->load(['exam', 'participant', 'sessionQuestions.question.options', 'answers']);
+
+        // Broadcast event untuk real-time monitoring
+        Event::dispatch(new ExamSessionStarted($session));
+
+        return $session;
     }
 
     public function submit(ExamSession $session, bool $forced = false): ExamResult
@@ -170,6 +179,9 @@ class ExamService
             $session->loadMissing('participant');
             $this->notificationService->notifyExamResultPublished($result, $session->exam, $session->participant);
 
+            // Broadcast event untuk real-time monitoring
+            Event::dispatch(new ExamSessionSubmitted($session, $result, $forced));
+
             return $result;
         });
     }
@@ -195,7 +207,7 @@ class ExamService
             $session->loadMissing('exam');
             $violationSettings = $session->exam->effectiveViolationSettings();
 
-            ViolationLog::create([
+            $violation = ViolationLog::create([
                 'session_id' => $session->id,
                 'type' => $type,
                 'duration_seconds' => max(0, $durationSeconds),
@@ -205,6 +217,9 @@ class ExamService
 
             $session->increment('violations_count');
             $session->refresh();
+
+            // Broadcast event untuk real-time monitoring (pelanggaran)
+            Event::dispatch(new ExamSessionViolation($session, $violation, false));
 
             $forced = false;
 
@@ -221,6 +236,9 @@ class ExamService
                     User::find(1) ?? User::first(), // System user fallback
                     true
                 );
+
+                // Broadcast event forced submit karena pelanggaran
+                Event::dispatch(new ExamSessionViolation($session, $violation, true));
             }
 
             return ['violations' => $session->violations_count, 'forced' => $forced];

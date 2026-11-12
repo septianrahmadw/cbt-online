@@ -35,6 +35,7 @@ class Question extends Model
         'reviewed_at',
         'created_by',
         'score_weight',
+        'current_version',
     ];
 
     protected $casts = [
@@ -43,6 +44,7 @@ class Question extends Model
         'is_active' => 'boolean',
         'review_status' => QuestionReviewStatus::class,
         'reviewed_at' => 'datetime',
+        'current_version' => 'integer',
     ];
 
     /**
@@ -88,5 +90,27 @@ class Question extends Model
     public function correctOptions(): HasMany
     {
         return $this->hasMany(QuestionOption::class)->where('is_correct', true)->orderBy('label');
+    }
+
+    public function versions(): HasMany
+    {
+        return $this->hasMany(QuestionVersion::class)->orderBy('version_number');
+    }
+
+    public function currentVersion(): HasOne
+    {
+        return $this->hasOne(QuestionVersion::class)->where('version_number', $this->current_version ?? 1);
+    }
+
+    public function latestVersion(): HasOne
+    {
+        return $this->hasOne(QuestionVersion::class)->latest('version_number');
+    }
+
+    public function approvedVersion(): HasOne
+    {
+        return $this->hasOne(QuestionVersion::class)
+            ->where('review_status', QuestionReviewStatus::Approved->value)
+            ->latest('version_number');
     }
 }

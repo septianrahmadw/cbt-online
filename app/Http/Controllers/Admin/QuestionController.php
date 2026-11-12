@@ -10,6 +10,7 @@ use App\Models\QuestionOption;
 use App\QuestionReviewStatus;
 use App\Services\NotificationService;
 use App\Services\QuestionImportService;
+use App\Services\QuestionVersionService;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Collection;
@@ -21,6 +22,10 @@ use Symfony\Component\HttpFoundation\StreamedResponse;
 
 class QuestionController extends Controller
 {
+    public function __construct(
+        protected QuestionVersionService $versionService
+    ) {}
+
     public function index(Request $request): Response
     {
         $this->authorize('viewAny', Question::class);
@@ -233,6 +238,11 @@ class QuestionController extends Controller
             ];
         }
 
+        // Buat versi sebelum update (kecuali soal baru yang belum punya versi)
+        if ($question->current_version > 0) {
+            $this->versionService->createVersion($question, $request->user()->id);
+        }
+
         $question->update($attributes);
 
         $this->updateOptions($question, $request);
@@ -264,6 +274,9 @@ class QuestionController extends Controller
             return back()->with('error', 'Soal ini sudah dikirim atau sudah disetujui.');
         }
 
+        // Buat versi saat submit for review
+        $this->versionService->createVersionOnStatusChange($question, $request->user()->id, QuestionReviewStatus::Pending->value, 'Dikirim untuk review');
+
         $question->update([
             'review_status' => QuestionReviewStatus::Pending,
             'review_note' => null,
@@ -292,6 +305,9 @@ class QuestionController extends Controller
         $newStatus = $data['decision'] === 'approve'
             ? QuestionReviewStatus::Approved
             : QuestionReviewStatus::Rejected;
+
+        // Buat versi saat approve/reject
+        $this->versionService->createVersionOnStatusChange($question, $request->user()->id, $newStatus->value, $data['review_note'] ?? null);
 
         $question->update([
             'review_status' => $newStatus,

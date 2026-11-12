@@ -135,6 +135,9 @@ class ResultController extends Controller
             'participant_id' => ['required', 'exists:participants,id'],
         ]);
 
+        $exam = Exam::findOrFail($data['exam_id']);
+        $this->authorize('reset', $exam);
+
         $deleted = DB::transaction(function () use ($data) {
             $sessions = ExamSession::where('exam_id', $data['exam_id'])
                 ->where('participant_id', $data['participant_id'])

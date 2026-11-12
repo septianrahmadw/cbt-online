@@ -43,4 +43,9 @@ class ExamPolicy
         return $user->isAdmin()
             || ($user->isPengawas() && $exam->isVisibleTo($user));
     }
+
+    public function reset(User $user, Exam $exam): bool
+    {
+        return $user->isAdmin();
+    }
 }

@@ -50,8 +50,6 @@ Route::prefix('admin')->name('admin.')->group(function () {
 
             Route::resource('modules', ModuleController::class);
 
-            Route::post('reset', [ResultController::class, 'reset'])->name('reset');
-
             Route::post('questions/{question}/review', [QuestionController::class, 'review'])->name('questions.review');
         });
 
@@ -71,6 +69,7 @@ Route::prefix('admin')->name('admin.')->group(function () {
             Route::get('results', [ResultController::class, 'index'])->name('results.index');
             Route::get('results/export', [ResultController::class, 'export'])->name('results.export');
             Route::get('results/print', [ResultController::class, 'print'])->name('results.print');
+            Route::post('reset', [ResultController::class, 'reset'])->name('reset');
         });
 
         Route::middleware('role:admin,pengawas')->group(function () {
