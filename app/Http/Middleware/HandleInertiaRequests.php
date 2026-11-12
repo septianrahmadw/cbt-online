@@ -24,9 +24,18 @@ class HandleInertiaRequests extends Middleware
         return [
             ...parent::share($request),
             'appName' => config('app.name'),
-            'institution' => fn () => InstitutionSetting::current()->only([
-                'school_name', 'logo_url', 'academic_year', 'exam_event_name', 'passing_grade_default',
-            ]),
+            'institution' => function () {
+                $settings = InstitutionSetting::current()->only([
+                    'school_name', 'logo_url', 'academic_year', 'exam_event_name', 'passing_grade_default',
+                ]);
+
+                // Make logo_url absolute if it exists
+                if ($settings['logo_url']) {
+                    $settings['logo_url'] = url($settings['logo_url']);
+                }
+
+                return $settings;
+            },
             'auth' => [
                 'user' => function () use ($request) {
                     $user = $request->user();
