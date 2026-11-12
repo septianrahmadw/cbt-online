@@ -8,6 +8,7 @@ use App\Models\Module;
 use App\Models\Question;
 use App\Models\QuestionOption;
 use App\QuestionReviewStatus;
+use App\Services\NotificationService;
 use App\Services\QuestionImportService;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
@@ -255,7 +256,7 @@ class QuestionController extends Controller
         return back()->with('success', 'Soal dihapus.');
     }
 
-    public function submitForReview(Request $request, Question $question): RedirectResponse
+    public function submitForReview(Request $request, Question $question, NotificationService $notificationService): RedirectResponse
     {
         $this->authorize('submitForReview', $question);
 
@@ -270,10 +271,12 @@ class QuestionController extends Controller
             'reviewed_at' => null,
         ]);
 
+        $notificationService->notifyQuestionSubmittedForReview($question, $request->user());
+
         return back()->with('success', 'Soal dikirim ke admin untuk direview.');
     }
 
-    public function review(Request $request, Question $question): RedirectResponse
+    public function review(Request $request, Question $question, NotificationService $notificationService): RedirectResponse
     {
         $this->authorize('review', $question);
 
@@ -286,14 +289,18 @@ class QuestionController extends Controller
             return back()->withErrors(['review_note' => 'Catatan review wajib diisi saat menolak soal.']);
         }
 
+        $newStatus = $data['decision'] === 'approve'
+            ? QuestionReviewStatus::Approved
+            : QuestionReviewStatus::Rejected;
+
         $question->update([
-            'review_status' => $data['decision'] === 'approve'
-                ? QuestionReviewStatus::Approved
-                : QuestionReviewStatus::Rejected,
+            'review_status' => $newStatus,
             'review_note' => $data['review_note'] ?? null,
             'reviewed_by' => $request->user()->id,
             'reviewed_at' => now(),
         ]);
+
+        $notificationService->notifyQuestionReviewed($question, $request->user(), $newStatus->value, $data['review_note'] ?? null);
 
         return back()->with('success', $data['decision'] === 'approve'
             ? 'Soal disetujui.'

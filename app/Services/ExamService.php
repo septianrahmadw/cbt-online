@@ -8,6 +8,7 @@ use App\Models\ExamResult;
 use App\Models\ExamSession;
 use App\Models\ExamSessionQuestion;
 use App\Models\Participant;
+use App\Models\User;
 use App\Models\ViolationLog;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
@@ -16,6 +17,10 @@ use RuntimeException;
 
 class ExamService
 {
+    public function __construct(
+        protected NotificationService $notificationService
+    ) {}
+
     public function start(Exam $exam, Participant $participant, Request $request): ExamSession
     {
         $windowState = $exam->windowState();
@@ -161,6 +166,10 @@ class ExamService
                 ['score' => $score, 'status' => $passingStatus]
             );
 
+            // Kirim notifikasi hasil ujian ke peserta
+            $session->loadMissing('participant');
+            $this->notificationService->notifyExamResultPublished($result, $session->exam, $session->participant);
+
             return $result;
         });
     }
@@ -200,8 +209,18 @@ class ExamService
             $forced = false;
 
             if ($violationSettings['enabled'] && $session->violations_count >= $violationSettings['limit']) {
-                $this->submit($session, true);
+                $result = $this->submit($session, true);
                 $forced = true;
+
+                // Kirim notifikasi ujian dihentikan paksa karena pelanggaran
+                $session->loadMissing(['participant', 'exam']);
+                $this->notificationService->notifyExamSessionStopped(
+                    $session,
+                    $session->exam,
+                    $session->participant,
+                    User::find(1) ?? User::first(), // System user fallback
+                    true
+                );
             }
 
             return ['violations' => $session->violations_count, 'forced' => $forced];

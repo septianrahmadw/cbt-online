@@ -8,6 +8,7 @@ use App\Models\Exam;
 use App\Models\ExamSession;
 use App\Models\User;
 use App\Services\ExamService;
+use App\Services\NotificationService;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
@@ -54,7 +55,7 @@ class SessionController extends Controller
         ]);
     }
 
-    public function stop(Request $request, ExamSession $examSession): RedirectResponse
+    public function stop(Request $request, ExamSession $examSession, NotificationService $notificationService): RedirectResponse
     {
         $data = $request->validate([
             'action' => ['required', 'in:submit,delete'],
@@ -70,14 +71,14 @@ class SessionController extends Controller
             return back()->with('error', 'Sesi ini sudah tidak aktif.');
         }
 
-        $this->applyStop($examSession, $data['action'], actor: $request->user());
+        $this->applyStop($examSession, $data['action'], actor: $request->user(), notificationService: $notificationService);
 
         return back()->with('success', $data['action'] === 'submit'
             ? 'Sesi dihentikan dan jawaban dikirim untuk dinilai.'
             : 'Sesi dihapus. Peserta dapat login kembali jika ujian masih dibuka.');
     }
 
-    public function stopAll(Request $request): RedirectResponse
+    public function stopAll(Request $request, NotificationService $notificationService): RedirectResponse
     {
         $data = $request->validate([
             'exam_id' => ['required', 'exists:exams,id'],
@@ -94,6 +95,7 @@ class SessionController extends Controller
         $sessions = ExamSession::where('exam_id', $data['exam_id'])
             ->where('status', 'active')
             ->where('is_completed', false)
+            ->with(['exam', 'participant'])
             ->lockForUpdate()
             ->get();
 
@@ -103,9 +105,9 @@ class SessionController extends Controller
 
         $actor = $request->user();
 
-        DB::transaction(function () use ($sessions, $data, $actor) {
+        DB::transaction(function () use ($sessions, $data, $actor, $notificationService) {
             foreach ($sessions as $session) {
-                $this->applyStop($session, $data['action'], recordAudit: false);
+                $this->applyStop($session, $data['action'], recordAudit: false, actor: $actor, notificationService: $notificationService);
             }
 
             AuditLog::record('exam.session_stop_all', $actor->role?->value, $actor->id, 'exam', (int) $data['exam_id'], [
@@ -117,10 +119,17 @@ class SessionController extends Controller
         return back()->with('success', $sessions->count().' sesi berjalan dihentikan.');
     }
 
-    private function applyStop(ExamSession $session, string $action, bool $recordAudit = true, ?User $actor = null): void
+    private function applyStop(ExamSession $session, string $action, bool $recordAudit = true, ?User $actor = null, ?NotificationService $notificationService = null): void
     {
+        $exam = $session->exam ?? $session->loadMissing('exam')->exam;
+        $participant = $session->participant ?? $session->loadMissing('participant')->participant;
+
         if ($action === 'submit') {
-            app(ExamService::class)->submit($session, true);
+            $result = app(ExamService::class)->submit($session, true);
+
+            if ($notificationService && $actor) {
+                $notificationService->notifyExamSessionStopped($session, $exam, $participant, $actor, true);
+            }
         } else {
             $session->delete();
         }
