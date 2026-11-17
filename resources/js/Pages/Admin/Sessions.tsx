@@ -1,7 +1,8 @@
-import { router, usePage, usePoll } from '@inertiajs/react';
-import { Activity, Ban, CheckCircle2, Clock, RefreshCw, Square, Trash2, Users } from 'lucide-react';
-import { useMemo, useState } from 'react';
-import { Badge, Button, Card, EmptyState, Modal } from '../../components/ui';
+import { router, usePage } from '@inertiajs/react';
+import { Activity, Ban, CheckCircle2, Clock, Square, Trash2, Users, Wifi, WifiOff } from 'lucide-react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { Badge, Button, Card, EmptyState, Modal, Tooltip } from '../../components/ui';
+import { useExamSessionsChannel } from '../../hooks/useReverb';
 import { useCountdown } from '../../hooks/useCountdown';
 import { AdminLayout } from '../../layouts/AdminLayout';
 import { cn, formatDuration } from '../../lib/utils';
@@ -32,6 +33,8 @@ interface SessionRow {
     total_questions: number;
     participant: SessionParticipant | null;
     exam: SessionExam | null;
+    status?: string;
+    is_completed?: boolean;
 }
 
 interface ExamGroup {
@@ -83,14 +86,114 @@ function SessionTimer({ remainingSeconds }: { remainingSeconds: number }) {
     );
 }
 
-export default function Sessions({ sessions }: { sessions: SessionRow[]; serverTime: string }) {
+interface SessionsProps {
+    sessions: SessionRow[];
+    exams: SessionExam[];
+    serverTime: string;
+}
+
+export default function Sessions({ sessions: initialSessions, exams }: SessionsProps) {
     const { auth } = usePage<SharedProps>().props;
     const isAdmin = auth?.user?.role === 'admin';
     const [tab, setTab] = useState<'active' | 'inactive'>('active');
     const [stopTarget, setStopTarget] = useState<StopTarget | null>(null);
     const [processing, setProcessing] = useState(false);
 
-    usePoll(5000, { only: ['sessions'] });
+    const reloadTimerRef = useRef<number | undefined>(undefined);
+
+    const reloadSessions = useCallback(() => {
+        if (reloadTimerRef.current) {
+            window.clearTimeout(reloadTimerRef.current);
+        }
+
+        reloadTimerRef.current = window.setTimeout(() => {
+            router.reload({ only: ['sessions', 'exams'] });
+        }, 150);
+    }, []);
+
+    useEffect(() => () => {
+        if (reloadTimerRef.current) {
+            window.clearTimeout(reloadTimerRef.current);
+        }
+    }, []);
+
+    // Semua ujian yang terlihat user, agar sesi baru pada ujian mana pun ikut terpantau.
+    const examIds = useMemo(() => exams.map((exam) => exam.id), [exams]);
+
+    const {
+        connected: reverbConnected,
+        sessions: realtimeSessions,
+        completedIds,
+    } = useExamSessionsChannel(examIds, {
+        onStarted: reloadSessions,
+        onSubmitted: reloadSessions,
+    });
+
+    const knownSessionIds = useMemo(() => new Set(initialSessions.map((session) => session.id)), [initialSessions]);
+
+    // Heartbeat untuk sesi yang belum ada di snapshot server memicu sinkronisasi (mis. event started terlewat).
+    const hasUnknownSession = useMemo(
+        () =>
+            realtimeSessions.some(
+                (session) => !knownSessionIds.has(session.session_id) && !completedIds.has(session.session_id),
+            ),
+        [realtimeSessions, knownSessionIds, completedIds],
+    );
+
+    useEffect(() => {
+        if (hasUnknownSession) {
+            reloadSessions();
+        }
+    }, [hasUnknownSession, reloadSessions]);
+
+    // Saat koneksi Reverb pulih, ambil snapshot terbaru untuk menutup celah event yang terlewat.
+    const wasConnectedRef = useRef(false);
+
+    useEffect(() => {
+        if (reverbConnected && !wasConnectedRef.current) {
+            reloadSessions();
+        }
+
+        wasConnectedRef.current = reverbConnected;
+    }, [reverbConnected, reloadSessions]);
+
+    // Fallback: polling 5 detik saat WebSocket terputus, 30 detik sebagai jaring pengaman saat live.
+    useEffect(() => {
+        const interval = window.setInterval(reloadSessions, reverbConnected ? 30_000 : 5_000);
+
+        return () => window.clearInterval(interval);
+    }, [reverbConnected, reloadSessions]);
+
+    // Gabungkan data real-time ke snapshot server; sesi selesai langsung disembunyikan.
+    const sessions = useMemo((): SessionRow[] => {
+        const realtimeMap = new Map(realtimeSessions.map((session) => [session.session_id, session]));
+
+        return initialSessions
+            .filter((session) => !completedIds.has(session.id))
+            .map((session): SessionRow => {
+                const realtime = realtimeMap.get(session.id);
+
+                if (!realtime) {
+                    return session;
+                }
+
+                return {
+                    ...session,
+                    remaining_seconds: realtime.remaining_seconds,
+                    violations_count: realtime.violations_count,
+                    answered_count: realtime.answered_count ?? session.answered_count,
+                    total_questions: realtime.total_questions || session.total_questions,
+                    status: realtime.status,
+                    is_completed: realtime.is_completed ?? session.is_completed,
+                    last_violation_type: (realtime.last_violation_type as string | null) ?? session.last_violation_type,
+                };
+            })
+            .filter((session) => {
+                const status = session.status ?? (session.is_completed ? 'submitted' : 'active');
+
+                return session.remaining_seconds > 0 && status === 'active' && !session.is_completed;
+            });
+    }, [initialSessions, realtimeSessions, completedIds]);
 
     const grouped = useMemo(() => {
         const map = new Map<number, ExamGroup>();
@@ -245,9 +348,22 @@ export default function Sessions({ sessions }: { sessions: SessionRow[]; serverT
             title="Sesi Berjalan"
             subtitle="Pantau dan hentikan sesi ujian yang sedang dikerjakan peserta."
             actions={
-                <span className="inline-flex items-center gap-1.5 text-xs text-slate-500 dark:text-slate-400">
-                    <RefreshCw size={12} /> Diperbarui otomatis setiap 5 detik
-                </span>
+                <div className="flex items-center gap-3">
+                    <Tooltip content={reverbConnected ? 'Live via WebSocket — progres peserta diperbarui otomatis' : 'WebSocket terputus — data diperbarui otomatis tiap 5 detik'}>
+                        <div className="inline-flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-xs font-medium transition-colors"
+                            style={{ backgroundColor: reverbConnected ? '#dcfce7' : '#fef3c7', color: reverbConnected ? '#166534' : '#92400e' }}>
+                            {reverbConnected ? (
+                                <>
+                                    <Wifi size={12} /> Live (Reverb)
+                                </>
+                            ) : (
+                                <>
+                                    <WifiOff size={12} /> Polling 5s
+                                </>
+                            )}
+                        </div>
+                    </Tooltip>
+                </div>
             }
         >
             <div className="mb-4 flex flex-wrap items-center gap-2">

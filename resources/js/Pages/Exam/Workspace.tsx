@@ -1,15 +1,16 @@
 import { usePage } from '@inertiajs/react';
-import { AlertTriangle, ChevronLeft, ChevronRight, Expand, Flag, ShieldCheck } from 'lucide-react';
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { AlertTriangle, ChevronLeft, ChevronRight, Expand, Flag, ShieldCheck, Keyboard, Save } from 'lucide-react';
+import { useEffect, useMemo, useRef, useState, useCallback } from 'react';
 import { MathText } from '../../components/MathText';
 import { ThemeToggle } from '../../components/ThemeToggle';
 import { ConnectionBadge, type ConnectionStatus } from '../../components/cbt/ConnectionBadge';
 import { CountdownTimer } from '../../components/cbt/CountdownTimer';
 import { QuestionNavigator } from '../../components/cbt/QuestionNavigator';
-import { Alert, Badge, Button, Modal } from '../../components/ui';
+import { Alert, Badge, Button, Modal, Tooltip } from '../../components/ui';
 import { useAntiCheat, type ViolationType } from '../../hooks/useAntiCheat';
 import { enterFullscreen, exitFullscreen, fullscreenSupported, unlockKeyboard } from '../../lib/fullscreen';
 import { csrfToken } from '../../lib/utils';
+import { useSyncedCountdown } from '../../hooks/useSyncedCountdown';
 import type { SharedProps } from '../../types/shared';
 
 interface Option {
@@ -67,7 +68,6 @@ export default function Workspace({
     const [submitting, setSubmitting] = useState(false);
     const [submitOpen, setSubmitOpen] = useState(false);
     const [fullscreenLost, setFullscreenLost] = useState(false);
-    const [remainingSeconds, setRemainingSeconds] = useState(session.remaining_seconds);
     const [violations, setViolations] = useState(session.violations_count);
     const [violation, setViolation] = useState<ViolationState>({
         open: false,
@@ -75,9 +75,12 @@ export default function Workspace({
         count: session.violations_count,
         message: '',
     });
+    const [lastSavedAt, setLastSavedAt] = useState<Date | null>(null);
+    const [keyboardHelpOpen, setKeyboardHelpOpen] = useState(false);
 
     const questionsRef = useRef(questions);
     const submittingRef = useRef(false);
+    const submitExamRef = useRef<() => Promise<void> | undefined>(undefined);
 
     questionsRef.current = questions;
     submittingRef.current = submitting;
@@ -86,6 +89,44 @@ export default function Workspace({
         await exitFullscreen();
         window.location.href = url ?? '/exam/result';
     };
+
+    const submitExam = async () => {
+        if (submittingRef.current) {
+            return;
+        }
+
+        setSubmitting(true);
+        setSubmitOpen(false);
+
+        try {
+            const response = await fetch('/exam/submit', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                    Accept: 'application/json',
+                    'X-CSRF-TOKEN': csrfToken(),
+                },
+                body: JSON.stringify({}),
+            });
+            const data = (await response.json().catch(() => null)) as { redirect?: string } | null;
+            await leaveExam(data?.redirect ?? '/exam/result');
+        } catch {
+            setSubmitting(false);
+            setSubmitOpen(true);
+        }
+    };
+
+    submitExamRef.current = submitExam;
+
+    // Synced countdown via Reverb
+    const { remaining: remainingSeconds, synced: timeSynced, connected: timeConnected, serverRemaining, forceSync: forceTimeSync } =
+        useSyncedCountdown({
+            initialSeconds: session.remaining_seconds,
+            sessionId: session.id,
+            examId: exam.id,
+            onExpire: () => submitExamRef.current?.(),
+            enabled: started && !submitting,
+        });
 
     useEffect(() => {
         if (!started || submitting) {
@@ -114,7 +155,10 @@ export default function Workspace({
                     const data = (await response.json().catch(() => null)) as { remaining_seconds?: number } | null;
 
                     if (!cancelled && typeof data?.remaining_seconds === 'number') {
-                        setRemainingSeconds(data.remaining_seconds);
+                        // Fallback sync if Reverb not connected
+                        if (!timeConnected) {
+                            forceTimeSync();
+                        }
                     }
                 }
             } catch {
@@ -137,7 +181,7 @@ export default function Workspace({
             document.removeEventListener('visibilitychange', handleVisibility);
         };
         // eslint-disable-next-line react-hooks/exhaustive-deps
-    }, [started, submitting]);
+    }, [started, submitting, timeConnected, forceTimeSync]);
 
     useEffect(() => {
         if (!started) {
@@ -164,6 +208,103 @@ export default function Workspace({
     useEffect(() => () => unlockKeyboard(), []);
 
     const current = questions[currentIndex];
+    const toggleDoubtRef = useRef<typeof toggleDoubt>(() => {});
+    // toggleDoubtRef will be updated after toggleDoubt is defined
+
+    // Keyboard shortcuts
+    useEffect(() => {
+        if (!started || submitting) {
+            return;
+        }
+
+        const handleKeyDown = (event: KeyboardEvent) => {
+            // Ignore if typing in input
+            if (event.target instanceof HTMLInputElement || event.target instanceof HTMLTextAreaElement) {
+                return;
+            }
+
+            // Ctrl/Cmd + Enter: Submit exam
+            if ((event.ctrlKey || event.metaKey) && event.key === 'Enter') {
+                event.preventDefault();
+                setSubmitOpen(true);
+                return;
+            }
+
+            // Arrow keys: Navigate questions
+            if (event.key === 'ArrowLeft') {
+                event.preventDefault();
+                setCurrentIndex((index) => Math.max(0, index - 1));
+                return;
+            }
+
+            if (event.key === 'ArrowRight') {
+                event.preventDefault();
+                setCurrentIndex((index) => Math.min(questions.length - 1, index + 1));
+                return;
+            }
+
+            // Number keys 1-9: Quick jump to question (1-9)
+            if (event.key >= '1' && event.key <= '9') {
+                const index = parseInt(event.key, 10) - 1;
+                if (index < questions.length) {
+                    event.preventDefault();
+                    setCurrentIndex(index);
+                }
+                return;
+            }
+
+            // D key: Toggle doubt flag
+            if (event.key.toLowerCase() === 'd') {
+                event.preventDefault();
+                toggleDoubtRef.current(current);
+                return;
+            }
+
+            // S key: Force sync
+            if ((event.ctrlKey || event.metaKey) && event.key.toLowerCase() === 's') {
+                event.preventDefault();
+                void syncAll();
+                return;
+            }
+
+            // F key: Toggle fullscreen
+            if (event.key.toLowerCase() === 'f' && !fullscreenLost) {
+                event.preventDefault();
+                if (document.fullscreenElement) {
+                    void exitFullscreen();
+                } else {
+                    void enterFullscreen();
+                }
+                return;
+            }
+
+            // ? key: Show keyboard shortcuts
+            if (event.key === '?' && event.shiftKey) {
+                event.preventDefault();
+                setKeyboardHelpOpen(true);
+                return;
+            }
+
+            // Escape: Close modals
+            if (event.key === 'Escape') {
+                if (violation.open && !violation.forced) {
+                    setViolation((prev) => ({ ...prev, open: false }));
+                }
+                if (submitOpen) {
+                    setSubmitOpen(false);
+                }
+                if (keyboardHelpOpen) {
+                    setKeyboardHelpOpen(false);
+                }
+                if (fullscreenLost) {
+                    void reenterFullscreen();
+                }
+            }
+        };
+
+        window.addEventListener('keydown', handleKeyDown);
+        return () => window.removeEventListener('keydown', handleKeyDown);
+    }, [started, submitting, questions.length, currentIndex, current, fullscreenLost, violation.open, submitOpen, keyboardHelpOpen]);
     const answeredCount = useMemo(
         () => questions.filter((question) => question.answer.selected_option_id !== null).length,
         [questions]
@@ -274,12 +415,14 @@ export default function Workspace({
         setConnection('saving');
 
         try {
-            await postJson('/exam/answer', {
+            const response = await postJson('/exam/answer', {
                 question_id: questionId,
                 selected_option_id: selectedOptionId,
                 is_doubtful: isDoubtful,
             });
             setConnection('saved');
+            setLastSavedAt(new Date());
+            return response;
         } catch {
             setConnection('offline');
         }
@@ -307,7 +450,11 @@ export default function Workspace({
             )
         );
 
-        setConnection(results.every((result) => result.status === 'fulfilled') ? 'saved' : 'offline');
+        const success = results.every((result) => result.status === 'fulfilled');
+        setConnection(success ? 'saved' : 'offline');
+        if (success) {
+            setLastSavedAt(new Date());
+        }
     };
 
     useEffect(() => {
@@ -336,32 +483,7 @@ export default function Workspace({
         updateAnswer(question.id, answer);
         void sendAnswer(question.id, answer.selected_option_id, answer.is_doubtful);
     };
-
-    const submitExam = async () => {
-        if (submittingRef.current) {
-            return;
-        }
-
-        setSubmitting(true);
-        setSubmitOpen(false);
-
-        try {
-            const response = await fetch('/exam/submit', {
-                method: 'POST',
-                headers: {
-                    'Content-Type': 'application/json',
-                    Accept: 'application/json',
-                    'X-CSRF-TOKEN': csrfToken(),
-                },
-                body: JSON.stringify({}),
-            });
-            const data = (await response.json().catch(() => null)) as { redirect?: string } | null;
-            await leaveExam(data?.redirect ?? '/exam/result');
-        } catch {
-            setSubmitting(false);
-            setSubmitOpen(true);
-        }
-    };
+    toggleDoubtRef.current = toggleDoubt;
 
     const handleViolation = async (type: ViolationType, durationSeconds: number) => {
         if (!started || submittingRef.current) {
@@ -461,10 +583,42 @@ export default function Workspace({
                                 <AlertTriangle size={12} className="mr-1" /> {violations} pelanggaran
                             </Badge>
                         )}
+
+                        {/* Last saved indicator */}
+                        {lastSavedAt && started && !submitting && (
+                            <Tooltip content={`Terakhir disimpan: ${lastSavedAt.toLocaleTimeString('id-ID')}`}>
+                                <div className="flex items-center gap-1.5 rounded-lg bg-emerald-50 px-3 py-1.5 text-emerald-700 dark:bg-emerald-500/10 dark:text-emerald-300" aria-live="polite">
+                                    <Save size={12} />
+                                    <span className="text-xs font-medium">Tersimpan</span>
+                                </div>
+                            </Tooltip>
+                        )}
+
                         <div className="text-right">
                             <p className="text-[11px] uppercase tracking-wide text-slate-500 dark:text-slate-400">Sisa waktu</p>
-                            <CountdownTimer initialSeconds={remainingSeconds} onExpire={submitExam} />
+                            <CountdownTimer
+                                remaining={remainingSeconds}
+                                synced={timeSynced}
+                                connected={timeConnected}
+                                serverRemaining={serverRemaining}
+                                urgent={remainingSeconds <= 300}
+                                enabled={started && !submitting}
+                            />
                         </div>
+
+                        {/* Keyboard shortcuts help button */}
+                        <Tooltip content="Bantuan Shortcut (Shift+?)">
+                            <Button
+                                variant="ghost"
+                                size="sm"
+                                onClick={() => setKeyboardHelpOpen(true)}
+                                className="h-9 w-9 p-0"
+                                aria-label="Keyboard shortcuts"
+                            >
+                                <Keyboard size={18} />
+                            </Button>
+                        </Tooltip>
+
                         <ThemeToggle />
                         <Button variant="danger" onClick={() => setSubmitOpen(true)} disabled={submitting}>
                             {submitting ? 'Mengirim...' : 'Akhiri Ujian'}
@@ -710,6 +864,64 @@ export default function Workspace({
                             <p className="text-lg font-semibold text-amber-600 dark:text-amber-300">{doubtfulCount}</p>
                             <p className="text-slate-500 dark:text-slate-400">Ragu</p>
                         </div>
+                    </div>
+                </div>
+            </Modal>
+
+            {/* Keyboard Shortcuts Help Modal */}
+            <Modal
+                open={keyboardHelpOpen}
+                onClose={() => setKeyboardHelpOpen(false)}
+                title="Shortcut Keyboard"
+                size="lg"
+                footer={
+                    <Button variant="secondary" onClick={() => setKeyboardHelpOpen(false)}>
+                        Tutup
+                    </Button>
+                }
+            >
+                <div className="space-y-4 text-sm">
+                    <div className="grid gap-3 sm:grid-cols-2">
+                        <div className="flex items-center gap-3 p-3 rounded-lg bg-slate-50 dark:bg-slate-900">
+                            <kbd className="flex h-8 min-w-[60px] items-center justify-center rounded border border-slate-300 bg-white px-2 font-mono text-xs text-slate-700 dark:border-slate-600 dark:bg-slate-800 dark:text-slate-200">Ctrl+Enter</kbd>
+                            <span className="text-slate-700 dark:text-slate-300">Kirim ujian (buka konfirmasi)</span>
+                        </div>
+                        <div className="flex items-center gap-3 p-3 rounded-lg bg-slate-50 dark:bg-slate-900">
+                            <kbd className="flex h-8 min-w-[60px] items-center justify-center rounded border border-slate-300 bg-white px-2 font-mono text-xs text-slate-700 dark:border-slate-600 dark:bg-slate-800 dark:text-slate-200">← / →</kbd>
+                            <span className="text-slate-700 dark:text-slate-300">Soal sebelumnya / selanjutnya</span>
+                        </div>
+                        <div className="flex items-center gap-3 p-3 rounded-lg bg-slate-50 dark:bg-slate-900">
+                            <kbd className="flex h-8 min-w-[60px] items-center justify-center rounded border border-slate-300 bg-white px-2 font-mono text-xs text-slate-700 dark:border-slate-600 dark:bg-slate-800 dark:text-slate-200">1-9</kbd>
+                            <span className="text-slate-700 dark:text-slate-300">Lompat ke soal 1-9</span>
+                        </div>
+                        <div className="flex items-center gap-3 p-3 rounded-lg bg-slate-50 dark:bg-slate-900">
+                            <kbd className="flex h-8 min-w-[60px] items-center justify-center rounded border border-slate-300 bg-white px-2 font-mono text-xs text-slate-700 dark:border-slate-600 dark:bg-slate-800 dark:text-slate-200">D</kbd>
+                            <span className="text-slate-700 dark:text-slate-300">Toggle ragu-ragu soal aktif</span>
+                        </div>
+                        <div className="flex items-center gap-3 p-3 rounded-lg bg-slate-50 dark:bg-slate-900">
+                            <kbd className="flex h-8 min-w-[60px] items-center justify-center rounded border border-slate-300 bg-white px-2 font-mono text-xs text-slate-700 dark:border-slate-600 dark:bg-slate-800 dark:text-slate-200">Ctrl+S</kbd>
+                            <span className="text-slate-700 dark:text-slate-300">Sinkronisasi jawaban manual</span>
+                        </div>
+                        <div className="flex items-center gap-3 p-3 rounded-lg bg-slate-50 dark:bg-slate-900">
+                            <kbd className="flex h-8 min-w-[60px] items-center justify-center rounded border border-slate-300 bg-white px-2 font-mono text-xs text-slate-700 dark:border-slate-600 dark:bg-slate-800 dark:text-slate-200">F</kbd>
+                            <span className="text-slate-700 dark:text-slate-300">Toggle mode layar penuh</span>
+                        </div>
+                        <div className="flex items-center gap-3 p-3 rounded-lg bg-slate-50 dark:bg-slate-900">
+                            <kbd className="flex h-8 min-w-[60px] items-center justify-center rounded border border-slate-300 bg-white px-2 font-mono text-xs text-slate-700 dark:border-slate-600 dark:bg-slate-800 dark:text-slate-200">Shift+?</kbd>
+                            <span className="text-slate-700 dark:text-slate-300">Tampilkan bantuan ini</span>
+                        </div>
+                        <div className="flex items-center gap-3 p-3 rounded-lg bg-slate-50 dark:bg-slate-900">
+                            <kbd className="flex h-8 min-w-[60px] items-center justify-center rounded border border-slate-300 bg-white px-2 font-mono text-xs text-slate-700 dark:border-slate-600 dark:bg-slate-800 dark:text-slate-200">Esc</kbd>
+                            <span className="text-slate-700 dark:text-slate-300">Tutup modal / kembali layar penuh</span>
+                        </div>
+                    </div>
+                    <div className="rounded-lg border border-slate-200 bg-amber-50 p-3 text-xs text-amber-800 dark:border-slate-700 dark:bg-amber-500/10 dark:text-amber-300">
+                        <p className="font-medium">Catatan:</p>
+                        <ul className="mt-1.5 list-disc list-inside space-y-1">
+                            <li>Shortcut hanya aktif saat ujian berjalan (bukan di input teks)</li>
+                            <li>Jawaban tersimpan otomatis ke server & localStorage</li>
+                            <li>Waktu dihitung di server (tidak bisa dimanipulasi)</li>
+                        </ul>
                     </div>
                 </div>
             </Modal>

@@ -21,8 +21,10 @@ class SessionController extends Controller
     {
         $this->authorize('viewAny', ExamSession::class);
 
+        $user = $request->user();
+
         $sessions = ExamSession::query()
-            ->whereHas('exam', fn ($query) => $query->visibleTo($request->user()))
+            ->whereHas('exam', fn ($query) => $query->visibleTo($user))
             ->with([
                 'participant:id,exam_number,full_name,class_name',
                 'exam:id,title,subject_name,is_active,duration_minutes,exam_end_date',
@@ -51,6 +53,19 @@ class SessionController extends Controller
 
         return Inertia::render('Admin/Sessions', [
             'sessions' => $sessions,
+            'exams' => Exam::query()
+                ->visibleTo($user)
+                ->orderByDesc('is_active')
+                ->orderBy('title')
+                ->get(['id', 'title', 'subject_name', 'is_active', 'duration_minutes'])
+                ->map(fn (Exam $exam) => [
+                    'id' => $exam->id,
+                    'title' => $exam->title,
+                    'subject_name' => $exam->subject_name,
+                    'is_active' => (bool) $exam->is_active,
+                    'duration_minutes' => (int) $exam->duration_minutes,
+                ])
+                ->values(),
             'serverTime' => now()->toIso8601String(),
         ]);
     }

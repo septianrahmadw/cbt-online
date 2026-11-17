@@ -15,7 +15,10 @@ class ExamSessionHeartbeat implements ShouldBroadcast
 
     public function __construct(
         public ExamSession $session
-    ) {}
+    ) {
+        // Load relationships needed for broadcast data
+        $this->session->loadMissing(['exam', 'violations' => fn ($q) => $q->latest('occurred_at')->limit(1)]);
+    }
 
     public function broadcastOn(): array
     {
@@ -27,12 +30,20 @@ class ExamSessionHeartbeat implements ShouldBroadcast
 
     public function broadcastWith(): array
     {
+        // Hitung ulang di sini: event ini melewati queue, sehingga SerializesModels
+        // memuat ulang model dari database tanpa hasil loadCount() dari constructor.
+        $this->session->loadMissing(['violations' => fn ($q) => $q->latest('occurred_at')->limit(1)]);
+
         return [
             'session_id' => $this->session->id,
             'exam_id' => $this->session->exam_id,
-            'remaining_seconds' => $this->session->remaining_seconds,
+            'remaining_seconds' => $this->session->secondsRemaining(),
             'violations_count' => $this->session->violations_count,
-            'status' => $this->session->status,
+            'last_violation_type' => $this->session->violations->first()?->type,
+            'answered_count' => $this->session->answers()->whereNotNull('selected_option_id')->count(),
+            'total_questions' => $this->session->sessionQuestions()->count(),
+            'status' => $this->session->status ?? ($this->session->is_completed ? 'submitted' : 'active'),
+            'is_completed' => $this->session->is_completed,
             'timestamp' => now()->toISOString(),
         ];
     }

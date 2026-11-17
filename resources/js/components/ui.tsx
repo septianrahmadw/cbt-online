@@ -1,10 +1,10 @@
 import { cn } from '../lib/utils';
 import { X } from 'lucide-react';
+import { useState, useRef, useEffect, ReactNode } from 'react';
 import type {
     ButtonHTMLAttributes,
     InputHTMLAttributes,
     LabelHTMLAttributes,
-    ReactNode,
     SelectHTMLAttributes,
     TextareaHTMLAttributes,
 } from 'react';
@@ -113,6 +113,15 @@ export function Alert({ tone = 'info', children }: { tone?: 'info' | 'success' |
     return <div className={cn('rounded-xl border px-4 py-3 text-sm', tones[tone])}>{children}</div>;
 }
 
+type ModalSize = 'sm' | 'md' | 'lg' | 'xl';
+
+const modalSizes: Record<ModalSize, string> = {
+    sm: 'max-w-md',
+    md: 'max-w-lg',
+    lg: 'max-w-2xl',
+    xl: 'max-w-4xl',
+};
+
 export function Modal({
     open,
     onClose,
@@ -120,6 +129,7 @@ export function Modal({
     children,
     footer,
     closable = true,
+    size = 'md',
 }: {
     open: boolean;
     onClose: () => void;
@@ -127,6 +137,7 @@ export function Modal({
     children: ReactNode;
     footer?: ReactNode;
     closable?: boolean;
+    size?: ModalSize;
 }) {
     if (!open) {
         return null;
@@ -138,7 +149,7 @@ export function Modal({
             onClick={() => closable && onClose()}
         >
             <div
-                className="card w-full max-w-lg p-5 shadow-xl"
+                className={cn('card w-full p-5 shadow-xl', modalSizes[size])}
                 onClick={(event) => event.stopPropagation()}
             >
                 <div className="mb-4 flex items-start justify-between gap-4">
@@ -166,5 +177,84 @@ export function EmptyState({ children }: { children: ReactNode }) {
         <div className="rounded-xl border border-dashed border-slate-300 px-4 py-10 text-center text-sm text-slate-500 dark:border-slate-700 dark:text-slate-400">
             {children}
         </div>
+    );
+}
+
+export function Tooltip({
+    content,
+    children,
+    position = 'top',
+    delay = 200,
+}: {
+    content: ReactNode;
+    children: ReactNode;
+    position?: 'top' | 'bottom' | 'left' | 'right';
+    delay?: number;
+}) {
+    const [visible, setVisible] = useState(false);
+    const timeoutRef = useRef<ReturnType<typeof window.setTimeout> | undefined>(undefined);
+    const childRef = useRef<HTMLElement | null>(null);
+
+    const show = () => {
+        timeoutRef.current = window.setTimeout(() => setVisible(true), delay);
+    };
+    const hide = () => {
+        if (timeoutRef.current) window.clearTimeout(timeoutRef.current);
+        setVisible(false);
+    };
+
+    const positionClasses: Record<string, string> = {
+        top: 'bottom-full left-1/2 -translate-x-1/2 mb-2',
+        bottom: 'top-full left-1/2 -translate-x-1/2 mt-2',
+        left: 'right-full top-1/2 -translate-y-1/2 mr-2',
+        right: 'left-full top-1/2 -translate-y-1/2 ml-2',
+    };
+
+    const arrowClasses: Record<string, string> = {
+        top: 'top-full left-1/2 -translate-x-1/2 border-t-slate-900 dark:border-t-slate-800',
+        bottom: 'bottom-full left-1/2 -translate-x-1/2 border-b-slate-900 dark:border-b-slate-800',
+        left: 'left-full top-1/2 -translate-y-1/2 border-l-slate-900 dark:border-l-slate-800',
+        right: 'right-full top-1/2 -translate-y-1/2 border-r-slate-900 dark:border-r-slate-800',
+    };
+
+    useEffect(() => {
+        const child = childRef.current;
+        if (!child) return;
+        child.addEventListener('mouseenter', show);
+        child.addEventListener('mouseleave', hide);
+        child.addEventListener('focus', show);
+        child.addEventListener('blur', hide);
+        return () => {
+            child.removeEventListener('mouseenter', show);
+            child.removeEventListener('mouseleave', hide);
+            child.removeEventListener('focus', show);
+            child.removeEventListener('blur', hide);
+        };
+    }, [show, hide]);
+
+    const tooltipPositionClass = positionClasses[position];
+    const arrowPositionClass = arrowClasses[position];
+
+    return (
+        <span ref={childRef} className="inline-block" tabIndex={0}>
+            {children}
+            {visible && (
+                <div
+                    className={cn(
+                        'fixed z-50 whitespace-nowrap rounded-md bg-slate-900 px-2 py-1 text-xs text-white shadow-lg dark:bg-slate-800 transition-opacity duration-150',
+                        tooltipPositionClass
+                    )}
+                    role="tooltip"
+                >
+                    {content}
+                    <div
+                        className={cn(
+                            'absolute size-0 border-4 border-transparent',
+                            arrowPositionClass
+                        )}
+                    />
+                </div>
+            )}
+        </span>
     );
 }

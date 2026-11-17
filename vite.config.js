@@ -17,4 +17,12 @@ export default defineConfig({
             ignored: ['**/storage/framework/views/**'],
         },
     },
+    build: {
+        minify: 'esbuild',
+        target: 'es2022',
+        sourcemap: true,
+    },
+    esbuild: {
+        legalComments: 'none',
+    },
 });

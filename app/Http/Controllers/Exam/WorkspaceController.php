@@ -87,6 +87,16 @@ class WorkspaceController extends Controller
         // Load fresh data for broadcast
         $session->loadMissing('exam');
 
+        // Check if session has expired - auto submit if time is up
+        if ($session->hasExpired()) {
+            app(ExamService::class)->submit($session, true);
+
+            return response()->json([
+                'ok' => false,
+                'redirect' => route('exam.result'),
+            ], 409);
+        }
+
         // Broadcast heartbeat untuk real-time monitoring
         Event::dispatch(new ExamSessionHeartbeat($session));
 
@@ -134,6 +144,9 @@ class WorkspaceController extends Controller
                 ]
             );
         });
+
+        // Broadcast progres terbaru agar panel monitoring admin ikut ter-update tanpa menunggu heartbeat.
+        Event::dispatch(new ExamSessionHeartbeat($session));
 
         return response()->json([
             'saved' => true,
