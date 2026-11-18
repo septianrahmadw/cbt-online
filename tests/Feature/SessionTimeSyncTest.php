@@ -52,6 +52,8 @@ class SessionTimeSyncTest extends TestCase
             ->assertInertia(fn (Assert $page) => $page
                 ->component('Admin/Sessions')
                 ->where('sessions.0.remaining_seconds', 300)
+                ->has('sessions.0.exam.exam_date')
+                ->has('sessions.0.exam.exam_end_date')
             );
     }
 

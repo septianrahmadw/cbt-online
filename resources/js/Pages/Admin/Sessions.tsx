@@ -1,6 +1,6 @@
 import { router, usePage } from '@inertiajs/react';
-import { Activity, CalendarClock, CheckCircle2, Clock, Square, Trash2, Users, Wifi, WifiOff } from 'lucide-react';
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { Activity, CalendarClock, CheckCircle2, Clock, LayoutList, Square, Trash2, Users, Wifi, WifiOff } from 'lucide-react';
+import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import { Badge, Button, Card, EmptyState, Modal, Tooltip } from '../../components/ui';
 import { useExamSessionsChannel } from '../../hooks/useReverb';
 import { useCountdown } from '../../hooks/useCountdown';
@@ -21,6 +21,8 @@ interface SessionExam {
     subject_name: string;
     is_active: boolean;
     duration_minutes: number;
+    exam_date: string | null;
+    exam_end_date: string | null;
 }
 
 interface SessionRow {
@@ -82,6 +84,20 @@ function formatSchedule(start: string | null, end: string | null): string {
     }
 
     return `${new Date(start).toLocaleString('id-ID')} s/d ${new Date(end).toLocaleString('id-ID')}`;
+}
+
+function InfoBlock({ icon, label, value }: { icon: ReactNode; label: string; value: ReactNode }) {
+    return (
+        <div className="flex items-start gap-2 rounded-lg bg-slate-50 px-3 py-2 dark:bg-slate-900/60">
+            <span className="mt-0.5 shrink-0 text-slate-400 dark:text-slate-500">{icon}</span>
+            <div className="min-w-0">
+                <p className="text-[10px] font-semibold uppercase tracking-wide text-slate-400 dark:text-slate-500">
+                    {label}
+                </p>
+                <div className="mt-0.5 text-xs font-medium text-slate-700 dark:text-slate-200">{value}</div>
+            </div>
+        </div>
+    );
 }
 
 function SessionTimer({ remainingSeconds }: { remainingSeconds: number }) {
@@ -262,9 +278,30 @@ export default function Sessions({ sessions: initialSessions, exams, upcomingExa
                         <h2 className="truncate text-sm font-semibold text-slate-900 dark:text-white">{group.exam.title}</h2>
                         <Badge tone="green">Ujian Aktif</Badge>
                     </div>
-                    <p className="mt-0.5 truncate text-xs text-slate-500 dark:text-slate-400">
-                        {group.exam.subject_name} &middot; {group.sessions.length} sesi berjalan
-                    </p>
+                    <div className="mt-3 grid gap-2 sm:grid-cols-3">
+                        <InfoBlock
+                            icon={<LayoutList size={14} />}
+                            label="Keterangan"
+                            value={
+                                <>
+                                    <span className="block truncate">{group.exam.subject_name}</span>
+                                    <span className="block text-[11px] font-normal text-slate-500 dark:text-slate-400">
+                                        {group.sessions.length} sesi berjalan
+                                    </span>
+                                </>
+                            }
+                        />
+                        <InfoBlock
+                            icon={<CalendarClock size={14} />}
+                            label="Waktu"
+                            value={formatSchedule(group.exam.exam_date, group.exam.exam_end_date)}
+                        />
+                        <InfoBlock
+                            icon={<Clock size={14} />}
+                            label="Durasi"
+                            value={`${group.exam.duration_minutes} menit`}
+                        />
+                    </div>
                 </div>
                 <Button
                     variant="danger"
@@ -422,13 +459,30 @@ export default function Sessions({ sessions: initialSessions, exams, upcomingExa
                                 </h2>
                                 <Badge tone="blue">Akan datang</Badge>
                             </div>
-                            <p className="mt-1 truncate text-xs text-slate-500 dark:text-slate-400">
-                                {exam.subject_name} &middot; {formatSchedule(exam.exam_date, exam.exam_end_date)} &middot;{' '}
-                                {exam.duration_minutes} menit
-                            </p>
-                            <p className="mt-1 text-[11px] text-slate-400 dark:text-slate-500">
-                                Belum ada sesi peserta.
-                            </p>
+                            <div className="mt-3 grid gap-2 sm:grid-cols-3">
+                                <InfoBlock
+                                    icon={<LayoutList size={14} />}
+                                    label="Keterangan"
+                                    value={
+                                        <>
+                                            <span className="block truncate">{exam.subject_name}</span>
+                                            <span className="block text-[11px] font-normal text-slate-500 dark:text-slate-400">
+                                                Belum ada sesi peserta.
+                                            </span>
+                                        </>
+                                    }
+                                />
+                                <InfoBlock
+                                    icon={<CalendarClock size={14} />}
+                                    label="Waktu"
+                                    value={formatSchedule(exam.exam_date, exam.exam_end_date)}
+                                />
+                                <InfoBlock
+                                    icon={<Clock size={14} />}
+                                    label="Durasi"
+                                    value={`${exam.duration_minutes} menit`}
+                                />
+                            </div>
                         </Card>
                     ))}
                 </div>

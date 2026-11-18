@@ -27,7 +27,7 @@ class SessionController extends Controller
             ->whereHas('exam', fn ($query) => $query->visibleTo($user))
             ->with([
                 'participant:id,exam_number,full_name,class_name',
-                'exam:id,title,subject_name,is_active,duration_minutes,exam_end_date',
+                'exam:id,title,subject_name,is_active,duration_minutes,exam_date,exam_end_date',
                 'violations' => fn ($query) => $query->latest('occurred_at')->limit(1),
             ])
             ->withCount([
@@ -47,7 +47,15 @@ class SessionController extends Controller
                 'answered_count' => (int) $session->answered_count,
                 'total_questions' => (int) $session->total_questions,
                 'participant' => $session->participant?->only(['id', 'exam_number', 'full_name', 'class_name']),
-                'exam' => $session->exam?->only(['id', 'title', 'subject_name', 'is_active', 'duration_minutes']),
+                'exam' => $session->exam?->only([
+                    'id',
+                    'title',
+                    'subject_name',
+                    'is_active',
+                    'duration_minutes',
+                    'exam_date',
+                    'exam_end_date',
+                ]),
             ])
             ->values();
 
