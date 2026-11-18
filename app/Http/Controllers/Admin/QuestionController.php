@@ -367,7 +367,10 @@ class QuestionController extends Controller
             'Content-Disposition' => 'attachment; filename="template-soal.csv"',
         ];
 
-        return response()->streamDownload(function () {
+        // Excel with an Indonesian locale expects semicolon-separated CSV.
+        $delimiter = ';';
+
+        return response()->streamDownload(function () use ($delimiter) {
             $output = fopen('php://output', 'w');
             // Write UTF-8 BOM so Excel opens it correctly
             fprintf($output, chr(0xEF).chr(0xBB).chr(0xBF));
@@ -391,7 +394,7 @@ class QuestionController extends Controller
                 'explanation',
                 'difficulty',
                 'module_code',
-            ]);
+            ], $delimiter);
 
             fputcsv($output, [
                 'Berapa hasil dari 2 + 3?',
@@ -412,7 +415,7 @@ class QuestionController extends Controller
                 'Penjelasan: 2 + 3 = 5.',
                 'mudah',
                 'umum',
-            ]);
+            ], $delimiter);
 
             fputcsv($output, [
                 'Manakah dari berikut yang merupakan bilangan prima?',
@@ -433,7 +436,7 @@ class QuestionController extends Controller
                 'Bilangan prima hanya habis dibagi 1 dan dirinya sendiri.',
                 'sedang',
                 'penalaran-matematika',
-            ]);
+            ], $delimiter);
 
             fclose($output);
         }, 'template-soal.csv', $headers);

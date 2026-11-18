@@ -634,6 +634,10 @@ export default function Questions({
                         <code className="bg-slate-100 px-1 rounded dark:bg-slate-800">A,C</code> untuk PG kompleks.
                     </p>
 
+                    <p className="text-xs text-slate-500 dark:text-slate-400">
+                        Template memakai pemisah titik koma (<code className="bg-slate-100 px-1 rounded dark:bg-slate-800">;</code>) agar kolom langsung terpisah saat dibuka di Excel. File hasil edit bisa di-import kembali tanpa diubah.
+                    </p>
+
                     <form onSubmit={submitImport} className="space-y-3.5 pt-2">
                         <div>
                             <Label htmlFor="import-module">Modul Bawaan (jika kolom module_code kosong)</Label>

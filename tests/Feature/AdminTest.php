@@ -7,6 +7,7 @@ use App\Models\InstitutionSetting;
 use App\Models\Module;
 use App\Models\Question;
 use App\Models\User;
+use App\Services\QuestionImportService;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Http\UploadedFile;
 use Inertia\Testing\AssertableInertia as Assert;
@@ -81,9 +82,63 @@ class AdminTest extends TestCase
         $this->actingAs(User::factory()->create());
 
         $response = $this->get('/admin/questions/template');
+
         $response->assertOk();
         $this->assertStringContainsString('text/csv', (string) $response->headers->get('Content-Type'));
         $this->assertStringContainsString('template-soal.csv', (string) $response->headers->get('Content-Disposition'));
+
+        $content = $response->streamedContent();
+        $this->assertStringStartsWith("\xEF\xBB\xBF", $content);
+        $this->assertStringStartsWith(
+            'question_text;passage;type;image;option_a;option_b;option_c;option_d;option_e;option_a_image;option_b_image;option_c_image;option_d_image;option_e_image;correct;explanation;difficulty;module_code',
+            substr($content, 3),
+        );
+    }
+
+    public function test_downloaded_question_template_can_be_imported(): void
+    {
+        $this->actingAs(User::factory()->create());
+
+        $exam = Exam::create([
+            'title' => 'Ujian Template',
+            'subject_name' => 'Umum',
+            'duration_minutes' => 60,
+            'exam_date' => now()->subHour(),
+            'exam_end_date' => now()->addDay(),
+            'is_active' => true,
+            'randomize_questions' => false,
+            'passing_grade' => 70,
+        ]);
+        $umum = Module::where('code', 'umum')->firstOrFail();
+        $matematika = Module::create([
+            'name' => 'Penalaran Matematika',
+            'code' => 'penalaran-matematika',
+            'color' => 'green',
+            'sort_order' => 2,
+            'is_active' => true,
+        ]);
+
+        $templateContent = $this->get('/admin/questions/template')->streamedContent();
+        $file = UploadedFile::fake()->createWithContent('template-soal.csv', $templateContent);
+
+        $result = (new QuestionImportService)->import($file, $exam->id);
+
+        $this->assertSame(2, $result['imported']);
+        $this->assertSame(0, $result['failed']);
+        $this->assertSame([], $result['errors']);
+
+        $firstQuestion = Question::where('question_text', 'Berapa hasil dari 2 + 3?')->firstOrFail();
+        $this->assertSame($umum->id, $firstQuestion->module_id);
+        $this->assertSame('Penjelasan: 2 + 3 = 5.', $firstQuestion->explanation);
+        $this->assertTrue($firstQuestion->options->firstWhere('label', 'B')->is_correct);
+        $this->assertFalse($firstQuestion->options->firstWhere('label', 'A')->is_correct);
+
+        $secondQuestion = Question::where('question_text', 'Manakah dari berikut yang merupakan bilangan prima?')->firstOrFail();
+        $this->assertSame($matematika->id, $secondQuestion->module_id);
+        $this->assertSame('multiple', $secondQuestion->type);
+        $this->assertTrue($secondQuestion->options->firstWhere('label', 'A')->is_correct);
+        $this->assertTrue($secondQuestion->options->firstWhere('label', 'B')->is_correct);
+        $this->assertFalse($secondQuestion->options->firstWhere('label', 'C')->is_correct);
     }
 
     public function test_admin_can_filter_questions_by_module(): void
