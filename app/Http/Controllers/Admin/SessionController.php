@@ -66,6 +66,22 @@ class SessionController extends Controller
                     'duration_minutes' => (int) $exam->duration_minutes,
                 ])
                 ->values(),
+            'upcomingExams' => Exam::query()
+                ->visibleTo($user)
+                ->where('is_active', true)
+                ->whereNotNull('exam_date')
+                ->where('exam_date', '>', now())
+                ->orderBy('exam_date')
+                ->get(['id', 'title', 'subject_name', 'exam_date', 'exam_end_date', 'duration_minutes'])
+                ->map(fn (Exam $exam) => [
+                    'id' => $exam->id,
+                    'title' => $exam->title,
+                    'subject_name' => $exam->subject_name,
+                    'exam_date' => $exam->exam_date?->toIso8601String(),
+                    'exam_end_date' => $exam->exam_end_date?->toIso8601String(),
+                    'duration_minutes' => (int) $exam->duration_minutes,
+                ])
+                ->values(),
             'serverTime' => now()->toIso8601String(),
         ]);
     }

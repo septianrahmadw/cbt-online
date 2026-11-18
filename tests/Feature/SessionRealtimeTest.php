@@ -55,6 +55,44 @@ class SessionRealtimeTest extends TestCase
         $this->assertNotSame($assignedExam->id, $otherExam->id);
     }
 
+    public function test_admin_sessions_page_lists_only_active_upcoming_exams(): void
+    {
+        $upcomingExam = Exam::factory()->upcoming()->create(['title' => 'Ujian Akan Datang']);
+        Exam::factory()->past()->create(['title' => 'Ujian Selesai']);
+        Exam::factory()->upcoming()->inactive()->create(['title' => 'Ujian Nonaktif Akan Datang']);
+        Exam::factory()->active()->create(['title' => 'Ujian Sedang Berjalan']);
+
+        $this->actingAs(User::factory()->create())
+            ->get('/admin/sessions')
+            ->assertOk()
+            ->assertInertia(fn (Assert $page) => $page
+                ->component('Admin/Sessions')
+                ->has('upcomingExams', 1)
+                ->where('upcomingExams.0.id', $upcomingExam->id)
+                ->where('upcomingExams.0.title', 'Ujian Akan Datang')
+            );
+    }
+
+    public function test_supervisor_only_sees_assigned_upcoming_exams(): void
+    {
+        $supervisor = User::factory()->pengawas()->create();
+        $assignedExam = Exam::factory()->upcoming()->create(['title' => 'Ujian Diawasi']);
+        $otherExam = Exam::factory()->upcoming()->create(['title' => 'Ujian Lain']);
+
+        $assignedExam->assignedUsers()->attach($supervisor->id);
+
+        $this->actingAs($supervisor)
+            ->get('/admin/sessions')
+            ->assertOk()
+            ->assertInertia(fn (Assert $page) => $page
+                ->component('Admin/Sessions')
+                ->has('upcomingExams', 1)
+                ->where('upcomingExams.0.id', $assignedExam->id)
+            );
+
+        $this->assertNotSame($assignedExam->id, $otherExam->id);
+    }
+
     public function test_admin_can_authorize_private_session_monitoring_channel(): void
     {
         config([

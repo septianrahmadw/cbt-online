@@ -1,5 +1,5 @@
 import { router, usePage } from '@inertiajs/react';
-import { Activity, Ban, CheckCircle2, Clock, Square, Trash2, Users, Wifi, WifiOff } from 'lucide-react';
+import { Activity, CalendarClock, CheckCircle2, Clock, Square, Trash2, Users, Wifi, WifiOff } from 'lucide-react';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Badge, Button, Card, EmptyState, Modal, Tooltip } from '../../components/ui';
 import { useExamSessionsChannel } from '../../hooks/useReverb';
@@ -42,6 +42,15 @@ interface ExamGroup {
     sessions: SessionRow[];
 }
 
+interface UpcomingExam {
+    id: number;
+    title: string;
+    subject_name: string;
+    exam_date: string | null;
+    exam_end_date: string | null;
+    duration_minutes: number;
+}
+
 type StopAction = 'submit' | 'delete';
 
 interface StopTarget {
@@ -67,6 +76,14 @@ function formatStartTime(value: string | null): string {
     return new Date(value).toLocaleTimeString('id-ID', { hour: '2-digit', minute: '2-digit' });
 }
 
+function formatSchedule(start: string | null, end: string | null): string {
+    if (!start || !end) {
+        return 'Jadwal belum ditentukan';
+    }
+
+    return `${new Date(start).toLocaleString('id-ID')} s/d ${new Date(end).toLocaleString('id-ID')}`;
+}
+
 function SessionTimer({ remainingSeconds }: { remainingSeconds: number }) {
     const remaining = useCountdown(remainingSeconds);
     const urgent = remaining <= 300;
@@ -89,13 +106,14 @@ function SessionTimer({ remainingSeconds }: { remainingSeconds: number }) {
 interface SessionsProps {
     sessions: SessionRow[];
     exams: SessionExam[];
+    upcomingExams: UpcomingExam[];
     serverTime: string;
 }
 
-export default function Sessions({ sessions: initialSessions, exams }: SessionsProps) {
+export default function Sessions({ sessions: initialSessions, exams, upcomingExams }: SessionsProps) {
     const { auth } = usePage<SharedProps>().props;
     const isAdmin = auth?.user?.role === 'admin';
-    const [tab, setTab] = useState<'active' | 'inactive'>('active');
+    const [tab, setTab] = useState<'active' | 'upcoming'>('active');
     const [stopTarget, setStopTarget] = useState<StopTarget | null>(null);
     const [processing, setProcessing] = useState(false);
 
@@ -107,7 +125,7 @@ export default function Sessions({ sessions: initialSessions, exams }: SessionsP
         }
 
         reloadTimerRef.current = window.setTimeout(() => {
-            router.reload({ only: ['sessions', 'exams'] });
+            router.reload({ only: ['sessions', 'exams', 'upcomingExams'] });
         }, 150);
     }, []);
 
@@ -212,12 +230,7 @@ export default function Sessions({ sessions: initialSessions, exams }: SessionsP
     }, [sessions]);
 
     const activeGroups = useMemo(() => grouped.filter((group) => group.exam.is_active), [grouped]);
-    const inactiveGroups = useMemo(() => grouped.filter((group) => !group.exam.is_active), [grouped]);
     const activeCount = useMemo(() => activeGroups.reduce((sum, group) => sum + group.sessions.length, 0), [activeGroups]);
-    const inactiveCount = useMemo(() => inactiveGroups.reduce((sum, group) => sum + group.sessions.length, 0), [inactiveGroups]);
-
-    const visibleGroups = tab === 'active' ? activeGroups : inactiveGroups;
-    const visibleCount = tab === 'active' ? activeCount : inactiveCount;
 
     const confirmStop = (action: StopAction) => {
         if (!stopTarget || processing) {
@@ -247,9 +260,7 @@ export default function Sessions({ sessions: initialSessions, exams }: SessionsP
                 <div className="min-w-0">
                     <div className="flex flex-wrap items-center gap-2">
                         <h2 className="truncate text-sm font-semibold text-slate-900 dark:text-white">{group.exam.title}</h2>
-                        <Badge tone={group.exam.is_active ? 'green' : 'red'}>
-                            {group.exam.is_active ? 'Ujian Aktif' : 'Ujian Nonaktif'}
-                        </Badge>
+                        <Badge tone="green">Ujian Aktif</Badge>
                     </div>
                     <p className="mt-0.5 truncate text-xs text-slate-500 dark:text-slate-400">
                         {group.exam.subject_name} &middot; {group.sessions.length} sesi berjalan
@@ -381,26 +392,46 @@ export default function Sessions({ sessions: initialSessions, exams }: SessionsP
                 </button>
                 <button
                     type="button"
-                    onClick={() => setTab('inactive')}
+                    onClick={() => setTab('upcoming')}
                     className={cn(
                         'inline-flex h-10 items-center gap-2 rounded-xl px-4 text-sm font-semibold transition',
-                        tab === 'inactive'
+                        tab === 'upcoming'
                             ? 'bg-brand-600 text-white shadow-sm'
                             : 'border border-slate-200 bg-white text-slate-600 hover:bg-slate-50 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-300',
                     )}
                 >
-                    <Ban size={16} /> Ujian Nonaktif ({inactiveCount})
+                    <CalendarClock size={16} /> Ujian Akan Datang ({upcomingExams.length})
                 </button>
             </div>
 
-            {visibleGroups.length === 0 ? (
-                <EmptyState>
-                    {tab === 'active'
-                        ? 'Tidak ada sesi berjalan pada ujian yang aktif.'
-                        : 'Tidak ada sesi berjalan pada ujian yang nonaktif.'}
-                </EmptyState>
+            {tab === 'active' ? (
+                activeGroups.length === 0 ? (
+                    <EmptyState>Tidak ada sesi berjalan pada ujian yang aktif.</EmptyState>
+                ) : (
+                    <div className="space-y-4">{activeGroups.map(renderGroup)}</div>
+                )
+            ) : upcomingExams.length === 0 ? (
+                <EmptyState>Tidak ada ujian aktif yang akan datang.</EmptyState>
             ) : (
-                <div className="space-y-4">{visibleGroups.map(renderGroup)}</div>
+                <div className="space-y-4">
+                    {upcomingExams.map((exam) => (
+                        <Card key={exam.id} className="p-4">
+                            <div className="flex flex-wrap items-center gap-2">
+                                <h2 className="truncate text-sm font-semibold text-slate-900 dark:text-white">
+                                    {exam.title}
+                                </h2>
+                                <Badge tone="blue">Akan datang</Badge>
+                            </div>
+                            <p className="mt-1 truncate text-xs text-slate-500 dark:text-slate-400">
+                                {exam.subject_name} &middot; {formatSchedule(exam.exam_date, exam.exam_end_date)} &middot;{' '}
+                                {exam.duration_minutes} menit
+                            </p>
+                            <p className="mt-1 text-[11px] text-slate-400 dark:text-slate-500">
+                                Belum ada sesi peserta.
+                            </p>
+                        </Card>
+                    ))}
+                </div>
             )}
 
             <Modal
