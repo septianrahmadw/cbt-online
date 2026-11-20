@@ -5,6 +5,8 @@ namespace Tests\Feature;
 use App\Models\Exam;
 use App\Models\InstitutionSetting;
 use App\Models\Module;
+use App\Models\Participant;
+use App\Models\ParticipantCategory;
 use App\Models\Question;
 use App\Models\User;
 use App\Services\QuestionImportService;
@@ -139,6 +141,51 @@ class AdminTest extends TestCase
         $this->assertTrue($secondQuestion->options->firstWhere('label', 'A')->is_correct);
         $this->assertTrue($secondQuestion->options->firstWhere('label', 'B')->is_correct);
         $this->assertFalse($secondQuestion->options->firstWhere('label', 'C')->is_correct);
+    }
+
+    public function test_admin_can_download_participant_template(): void
+    {
+        $this->actingAs(User::factory()->create());
+
+        $response = $this->get('/admin/participants/template');
+
+        $response->assertOk();
+        $this->assertStringContainsString('text/csv', (string) $response->headers->get('Content-Type'));
+        $this->assertStringContainsString('template-peserta.csv', (string) $response->headers->get('Content-Disposition'));
+
+        $content = $response->streamedContent();
+        $this->assertStringStartsWith("\xEF\xBB\xBF", $content);
+        $this->assertStringStartsWith(
+            'exam_number;full_name;nisn;class_name;category_code',
+            substr($content, 3),
+        );
+    }
+
+    public function test_downloaded_participant_template_can_be_imported(): void
+    {
+        $this->actingAs(User::factory()->create());
+
+        $category = ParticipantCategory::create([
+            'name' => 'Umum',
+            'code' => 'umum',
+            'description' => 'Peserta umum',
+            'is_active' => true,
+        ]);
+
+        $templateContent = $this->get('/admin/participants/template')->streamedContent();
+        $file = UploadedFile::fake()->createWithContent('template-peserta.csv', $templateContent);
+
+        $this->from('/admin/participants')
+            ->post('/admin/participants/import', ['file' => $file])
+            ->assertRedirect('/admin/participants')
+            ->assertSessionHas('success', 'Import selesai: 1 baru, 0 diperbarui, 0 baris gagal.');
+
+        $participant = Participant::where('exam_number', '2026001')->firstOrFail();
+
+        $this->assertSame('Contoh Peserta', $participant->full_name);
+        $this->assertSame('1234567890', $participant->nisn);
+        $this->assertSame('XII IPA 1', $participant->class_name);
+        $this->assertSame($category->id, $participant->category_id);
     }
 
     public function test_admin_can_filter_questions_by_module(): void

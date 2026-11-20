@@ -405,6 +405,9 @@ export default function Participants({
                     <p className="mb-3 text-xs text-slate-500 dark:text-slate-400">
                         Unggah file CSV dengan header: exam_number, full_name, nisn, class_name, category_code.
                     </p>
+                    <p className="mb-3 text-xs text-slate-500 dark:text-slate-400">
+                        Template memakai pemisah titik koma (<code className="rounded bg-slate-100 px-1 dark:bg-slate-800">;</code>) agar kolom langsung terpisah saat dibuka di Excel. File hasil edit bisa di-import kembali tanpa diubah.
+                    </p>
                     <form onSubmit={importCsv} className="space-y-3">
                         <input
                             type="file"

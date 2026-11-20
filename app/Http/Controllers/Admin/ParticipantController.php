@@ -113,7 +113,25 @@ class ParticipantController extends Controller
             return back()->with('error', 'File tidak dapat dibaca.');
         }
 
-        $header = fgetcsv($handle);
+        $firstLine = fgets($handle);
+
+        if ($firstLine === false) {
+            fclose($handle);
+
+            return back()->with('error', 'File tidak dapat dibaca.');
+        }
+
+        $delimiter = strpos($firstLine, ';') !== false && substr_count($firstLine, ';') > substr_count($firstLine, ',')
+            ? ';'
+            : ',';
+
+        rewind($handle);
+
+        if (fread($handle, 3) !== "\xEF\xBB\xBF") {
+            rewind($handle);
+        }
+
+        $header = fgetcsv($handle, 0, $delimiter);
         $header = array_map(fn ($value) => strtolower(trim((string) $value)), $header ?: []);
 
         $required = ['exam_number', 'full_name'];
@@ -130,8 +148,8 @@ class ParticipantController extends Controller
         $updated = 0;
         $failed = 0;
 
-        DB::transaction(function () use ($handle, $index, &$created, &$updated, &$failed) {
-            while (($row = fgetcsv($handle)) !== false) {
+        DB::transaction(function () use ($handle, $index, $delimiter, &$created, &$updated, &$failed) {
+            while (($row = fgetcsv($handle, 0, $delimiter)) !== false) {
                 $examNumber = trim((string) ($row[$index['exam_number']] ?? ''));
                 $fullName = trim((string) ($row[$index['full_name']] ?? ''));
 
@@ -185,10 +203,15 @@ class ParticipantController extends Controller
     {
         $headers = ['Content-Type' => 'text/csv', 'Content-Disposition' => 'attachment; filename="template-peserta.csv"'];
 
-        return response()->streamDownload(function () {
+        // Excel with an Indonesian locale expects semicolon-separated CSV.
+        $delimiter = ';';
+
+        return response()->streamDownload(function () use ($delimiter) {
             $output = fopen('php://output', 'w');
-            fputcsv($output, ['exam_number', 'full_name', 'nisn', 'class_name', 'category_code']);
-            fputcsv($output, ['2026001', 'Contoh Peserta', '1234567890', 'XII IPA 1', 'umum']);
+            // Write UTF-8 BOM so Excel opens it correctly
+            fprintf($output, chr(0xEF).chr(0xBB).chr(0xBF));
+            fputcsv($output, ['exam_number', 'full_name', 'nisn', 'class_name', 'category_code'], $delimiter);
+            fputcsv($output, ['2026001', 'Contoh Peserta', '1234567890', 'XII IPA 1', 'umum'], $delimiter);
             fclose($output);
         }, 'template-peserta.csv', $headers);
     }
