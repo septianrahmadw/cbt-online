@@ -266,43 +266,35 @@ export default function Participants({
                                 </option>
                             ))}
                         </Select>
-                        <Link
-                            href="/admin/participant-categories"
-                            className="text-xs font-semibold text-brand-600 hover:text-brand-700 dark:text-brand-300 sm:ml-auto"
-                        >
-                            Kelola kategori →
-                        </Link>
-                        {filters.category_id && (
-                            <Button type="button" size="sm" variant="danger" onClick={openCategoryDelete}>
-                                <Trash2 size={14} /> Hapus peserta kategori ini
-                            </Button>
-                        )}
-                    </div>
-
-                    {selectionCount > 0 && (
-                        <div className="mb-3 flex flex-wrap items-center gap-2 rounded-xl border border-rose-200 bg-rose-50 px-3 py-2 text-sm text-rose-800 dark:border-rose-500/30 dark:bg-rose-500/10 dark:text-rose-200">
-                            <span className="font-medium">
-                                {selectAllFiltered
-                                    ? `Semua ${participants.total} hasil filter dipilih`
-                                    : `${selectedIds.length} peserta dipilih`}
-                            </span>
-                            <Button
-                                type="button"
-                                size="sm"
-                                variant="danger"
-                                onClick={selectAllFiltered ? openFilteredDelete : openSelectedDelete}
-                            >
-                                <Trash2 size={14} /> Hapus {selectionCount} peserta
-                            </Button>
-                            <button
-                                type="button"
-                                onClick={resetSelection}
-                                className="text-xs font-semibold text-rose-700 underline-offset-2 hover:underline dark:text-rose-300"
-                            >
-                                Batalkan pilihan
-                            </button>
+                        <div className="flex flex-wrap items-center gap-2 sm:ml-auto sm:justify-end">
+                            {selectionCount > 0 ? (
+                                <>
+                                    <span className="text-xs font-medium text-rose-700 dark:text-rose-300">
+                                        {selectAllFiltered
+                                            ? `Semua ${participants.total} hasil filter dipilih`
+                                            : `${selectedIds.length} peserta dipilih`}
+                                    </span>
+                                    <Button
+                                        type="button"
+                                        size="sm"
+                                        variant="danger"
+                                        onClick={selectAllFiltered ? openFilteredDelete : openSelectedDelete}
+                                    >
+                                        <Trash2 size={14} /> Hapus Peserta
+                                    </Button>
+                                    <Button type="button" size="sm" variant="secondary" onClick={resetSelection}>
+                                        Batalkan Pilihan
+                                    </Button>
+                                </>
+                            ) : (
+                                filters.category_id && (
+                                    <Button type="button" size="sm" variant="danger" onClick={openCategoryDelete}>
+                                        <Trash2 size={14} /> Hapus peserta kategori ini
+                                    </Button>
+                                )
+                            )}
                         </div>
-                    )}
+                    </div>
 
                     {participants.data.length === 0 ? (
                         <EmptyState>Belum ada peserta. Tambahkan manual atau import CSV.</EmptyState>
