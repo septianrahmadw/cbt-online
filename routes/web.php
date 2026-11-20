@@ -46,6 +46,7 @@ Route::prefix('admin')->name('admin.')->group(function () {
 
             Route::get('participants/template', [ParticipantController::class, 'template'])->name('participants.template');
             Route::post('participants/import', [ParticipantController::class, 'import'])->name('participants.import');
+            Route::delete('participants/bulk', [ParticipantController::class, 'bulkDestroy'])->name('participants.bulk-destroy');
             Route::resource('participants', ParticipantController::class)->except(['create', 'show', 'edit']);
 
             Route::resource('modules', ModuleController::class);

@@ -89,6 +89,32 @@ class RoleAccessTest extends TestCase
         ]);
     }
 
+    public function test_dosen_cannot_bulk_delete_participants(): void
+    {
+        $dosen = User::factory()->dosen()->create();
+        $participant = Participant::factory()->create(['exam_number' => '2026971']);
+
+        $this->actingAs($dosen)
+            ->from('/admin/participants')
+            ->delete('/admin/participants/bulk', ['ids' => [$participant->id]])
+            ->assertForbidden();
+
+        $this->assertDatabaseHas('participants', ['id' => $participant->id]);
+    }
+
+    public function test_pengawas_cannot_bulk_delete_participants(): void
+    {
+        $pengawas = User::factory()->pengawas()->create();
+        $participant = Participant::factory()->create(['exam_number' => '2026972']);
+
+        $this->actingAs($pengawas)
+            ->from('/admin/participants')
+            ->delete('/admin/participants/bulk', ['ids' => [$participant->id]])
+            ->assertForbidden();
+
+        $this->assertDatabaseHas('participants', ['id' => $participant->id]);
+    }
+
     private function createExam(string $title): Exam
     {
         return Exam::create([

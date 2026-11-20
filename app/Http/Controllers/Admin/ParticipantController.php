@@ -5,9 +5,12 @@ namespace App\Http\Controllers\Admin;
 use App\Http\Controllers\Controller;
 use App\Models\Participant;
 use App\Models\ParticipantCategory;
+use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Validator;
+use Illuminate\Validation\Validator as ValidatorInstance;
 use Inertia\Inertia;
 use Inertia\Response;
 use Symfony\Component\HttpFoundation\StreamedResponse;
@@ -19,17 +22,9 @@ class ParticipantController extends Controller
         $search = trim((string) $request->query('search', ''));
         $categoryId = $request->integer('category_id') ?: null;
 
-        $participants = Participant::query()
+        $participants = $this->filteredParticipants($request)
             ->with('category:id,name,code')
             ->withCount('results')
-            ->when($search !== '', function ($query) use ($search) {
-                $query->where(function ($q) use ($search) {
-                    $q->where('full_name', 'like', "%{$search}%")
-                        ->orWhere('exam_number', 'like', "%{$search}%")
-                        ->orWhere('nisn', 'like', "%{$search}%");
-                });
-            })
-            ->when($categoryId, fn ($query) => $query->where('category_id', $categoryId))
             ->orderBy('full_name')
             ->paginate(15)
             ->withQueryString();
@@ -68,6 +63,42 @@ class ParticipantController extends Controller
         $participant->delete();
 
         return back()->with('success', 'Peserta dihapus.');
+    }
+
+    public function bulkDestroy(Request $request): RedirectResponse
+    {
+        $validator = Validator::make($request->all(), [
+            'ids' => ['sometimes', 'array', 'min:1'],
+            'ids.*' => ['integer', 'exists:participants,id'],
+            'category_id' => ['sometimes', 'nullable', 'integer', 'exists:participant_categories,id'],
+            'select_all' => ['sometimes', 'boolean'],
+            'search' => ['sometimes', 'string', 'max:150'],
+        ]);
+
+        $validator->after(function (ValidatorInstance $validator) use ($request) {
+            $hasSelectedIds = is_array($request->input('ids')) && $request->input('ids') !== [];
+            $hasCategory = $request->filled('category_id');
+            $hasSelectAll = $request->boolean('select_all');
+
+            if (! $hasSelectedIds && ! $hasCategory && ! $hasSelectAll) {
+                $validator->errors()->add('selection', 'Pilih peserta, kategori, atau semua hasil filter terlebih dahulu.');
+            }
+        });
+
+        $data = $validator->validate();
+
+        if ($request->boolean('select_all')) {
+            $query = $this->filteredParticipants($request);
+        } elseif (array_key_exists('ids', $data)) {
+            $query = Participant::whereIn('id', $data['ids']);
+        } else {
+            $query = Participant::where('category_id', $data['category_id']);
+        }
+
+        $deletedCount = $query->count();
+        $query->delete();
+
+        return back()->with('success', "{$deletedCount} peserta berhasil dihapus.");
     }
 
     public function import(Request $request): RedirectResponse
@@ -160,6 +191,22 @@ class ParticipantController extends Controller
             fputcsv($output, ['2026001', 'Contoh Peserta', '1234567890', 'XII IPA 1', 'umum']);
             fclose($output);
         }, 'template-peserta.csv', $headers);
+    }
+
+    private function filteredParticipants(Request $request): Builder
+    {
+        $search = trim((string) $request->input('search', ''));
+        $categoryId = $request->integer('category_id') ?: null;
+
+        return Participant::query()
+            ->when($search !== '', function ($query) use ($search) {
+                $query->where(function ($q) use ($search) {
+                    $q->where('full_name', 'like', "%{$search}%")
+                        ->orWhere('exam_number', 'like', "%{$search}%")
+                        ->orWhere('nisn', 'like', "%{$search}%");
+                });
+            })
+            ->when($categoryId, fn ($query) => $query->where('category_id', $categoryId));
     }
 
     /**

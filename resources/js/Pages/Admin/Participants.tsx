@@ -37,6 +37,12 @@ interface Paginator {
     total: number;
 }
 
+type PendingDelete = {
+    mode: 'selected' | 'filtered' | 'category';
+    message: string;
+    payload: { ids?: number[]; select_all?: boolean; search?: string; category_id?: number | null };
+};
+
 export default function Participants({
     participants,
     filters,
@@ -50,6 +56,10 @@ export default function Participants({
     const [categoryId, setCategoryId] = useState<string>(filters.category_id ? String(filters.category_id) : '');
     const [modalOpen, setModalOpen] = useState(false);
     const [editing, setEditing] = useState<Participant | null>(null);
+    const [selectedIds, setSelectedIds] = useState<number[]>([]);
+    const [selectAllFiltered, setSelectAllFiltered] = useState(false);
+    const [pendingDelete, setPendingDelete] = useState<PendingDelete | null>(null);
+    const [deleting, setDeleting] = useState(false);
 
     const form = useForm({
         exam_number: '',
@@ -61,6 +71,35 @@ export default function Participants({
     });
 
     const importer = useForm<{ file: File | null }>({ file: null });
+
+    const visibleIds = participants.data.map((participant) => participant.id);
+    const allVisibleSelected = visibleIds.length > 0 && visibleIds.every((id) => selectedIds.includes(id));
+    const selectionCount = selectAllFiltered ? participants.total : selectedIds.length;
+    const selectedCategoryName = categories.find((category) => category.id === filters.category_id)?.name ?? 'kategori ini';
+
+    const resetSelection = () => {
+        setSelectedIds([]);
+        setSelectAllFiltered(false);
+    };
+
+    const toggleSelectAll = (checked: boolean) => {
+        if (checked) {
+            setSelectedIds([]);
+            setSelectAllFiltered(true);
+        } else {
+            resetSelection();
+        }
+    };
+
+    const toggleParticipant = (participant: Participant, checked: boolean) => {
+        if (selectAllFiltered) {
+            return;
+        }
+
+        setSelectedIds((current) =>
+            checked ? [...current, participant.id] : current.filter((id) => id !== participant.id),
+        );
+    };
 
     const openCreate = () => {
         setEditing(null);
@@ -107,8 +146,50 @@ export default function Participants({
         }
     };
 
+    const openSelectedDelete = () => {
+        setPendingDelete({
+            mode: 'selected',
+            message: `Hapus ${selectedIds.length} peserta yang dipilih?`,
+            payload: { ids: selectedIds },
+        });
+    };
+
+    const openFilteredDelete = () => {
+        setPendingDelete({
+            mode: 'filtered',
+            message: `Hapus semua ${participants.total} peserta yang cocok dengan filter saat ini?`,
+            payload: { select_all: true, search: filters.search, category_id: filters.category_id },
+        });
+    };
+
+    const openCategoryDelete = () => {
+        setPendingDelete({
+            mode: 'category',
+            message: `Hapus semua peserta dalam kategori ${selectedCategoryName}? Filter pencarian akan diabaikan.`,
+            payload: { category_id: filters.category_id },
+        });
+    };
+
+    const confirmDelete = () => {
+        if (! pendingDelete) {
+            return;
+        }
+
+        setDeleting(true);
+        router.delete('/admin/participants/bulk', {
+            data: pendingDelete.payload,
+            preserveScroll: true,
+            onSuccess: () => {
+                resetSelection();
+                setPendingDelete(null);
+            },
+            onFinish: () => setDeleting(false),
+        });
+    };
+
     const runSearch = (event: React.FormEvent) => {
         event.preventDefault();
+        resetSelection();
         router.get(
             '/admin/participants',
             { search, category_id: categoryId || undefined },
@@ -168,6 +249,7 @@ export default function Participants({
                             value={categoryId}
                             onChange={(event) => {
                                 const value = event.target.value;
+                                resetSelection();
                                 setCategoryId(value);
                                 router.get(
                                     '/admin/participants',
@@ -190,7 +272,37 @@ export default function Participants({
                         >
                             Kelola kategori →
                         </Link>
+                        {filters.category_id && (
+                            <Button type="button" size="sm" variant="danger" onClick={openCategoryDelete}>
+                                <Trash2 size={14} /> Hapus peserta kategori ini
+                            </Button>
+                        )}
                     </div>
+
+                    {selectionCount > 0 && (
+                        <div className="mb-3 flex flex-wrap items-center gap-2 rounded-xl border border-rose-200 bg-rose-50 px-3 py-2 text-sm text-rose-800 dark:border-rose-500/30 dark:bg-rose-500/10 dark:text-rose-200">
+                            <span className="font-medium">
+                                {selectAllFiltered
+                                    ? `Semua ${participants.total} hasil filter dipilih`
+                                    : `${selectedIds.length} peserta dipilih`}
+                            </span>
+                            <Button
+                                type="button"
+                                size="sm"
+                                variant="danger"
+                                onClick={selectAllFiltered ? openFilteredDelete : openSelectedDelete}
+                            >
+                                <Trash2 size={14} /> Hapus {selectionCount} peserta
+                            </Button>
+                            <button
+                                type="button"
+                                onClick={resetSelection}
+                                className="text-xs font-semibold text-rose-700 underline-offset-2 hover:underline dark:text-rose-300"
+                            >
+                                Batalkan pilihan
+                            </button>
+                        </div>
+                    )}
 
                     {participants.data.length === 0 ? (
                         <EmptyState>Belum ada peserta. Tambahkan manual atau import CSV.</EmptyState>
@@ -199,6 +311,18 @@ export default function Participants({
                             <table className="w-full text-sm">
                                 <thead>
                                     <tr className="text-left text-xs uppercase tracking-wide text-slate-500 dark:text-slate-400">
+                                        <th className="pb-2">
+                                            <label className="flex items-center gap-2 normal-case tracking-normal">
+                                                <input
+                                                    type="checkbox"
+                                                    checked={selectAllFiltered || allVisibleSelected}
+                                                    onChange={(event) => toggleSelectAll(event.target.checked)}
+                                                    aria-label="Pilih semua hasil filter"
+                                                    className="h-4 w-4 rounded border-slate-300 bg-white text-brand-600 focus:ring-brand-500 dark:border-slate-600 dark:bg-slate-950"
+                                                />
+                                                <span>Pilih semua ({participants.total})</span>
+                                            </label>
+                                        </th>
                                         <th className="pb-2">No Peserta</th>
                                         <th className="pb-2">Nama</th>
                                         <th className="pb-2">Kelas</th>
@@ -210,6 +334,16 @@ export default function Participants({
                                 <tbody className="divide-y divide-slate-100 dark:divide-slate-800">
                                     {participants.data.map((participant) => (
                                         <tr key={participant.id}>
+                                            <td className="py-2">
+                                                <input
+                                                    type="checkbox"
+                                                    checked={selectAllFiltered || selectedIds.includes(participant.id)}
+                                                    disabled={selectAllFiltered}
+                                                    onChange={(event) => toggleParticipant(participant, event.target.checked)}
+                                                    aria-label={`Pilih ${participant.full_name}`}
+                                                    className="h-4 w-4 rounded border-slate-300 bg-white text-brand-600 focus:ring-brand-500 disabled:cursor-not-allowed disabled:opacity-50 dark:border-slate-600 dark:bg-slate-950"
+                                                />
+                                            </td>
                                             <td className="py-2 font-mono text-xs text-slate-700 dark:text-slate-300">{participant.exam_number}</td>
                                             <td className="py-2">
                                                 <p className="font-medium text-slate-900 dark:text-white">{participant.full_name}</p>
@@ -378,6 +512,28 @@ export default function Participants({
                         Peserta aktif
                     </label>
                 </form>
+            </Modal>
+
+            <Modal
+                open={pendingDelete !== null}
+                onClose={() => setPendingDelete(null)}
+                title={pendingDelete?.mode === 'category' ? 'Hapus peserta berdasarkan kategori' : 'Konfirmasi hapus peserta'}
+                closable={! deleting}
+                footer={
+                    <>
+                        <Button type="button" variant="secondary" onClick={() => setPendingDelete(null)} disabled={deleting}>
+                            Batal
+                        </Button>
+                        <Button type="button" variant="danger" onClick={confirmDelete} disabled={deleting}>
+                            {deleting ? 'Menghapus...' : 'Ya, Hapus'}
+                        </Button>
+                    </>
+                }
+            >
+                <p className="font-medium text-slate-900 dark:text-white">{pendingDelete?.message}</p>
+                <p className="mt-2 text-xs text-rose-600 dark:text-rose-400">
+                    Peserta yang dihapus beserta sesi dan hasil ujiannya tidak dapat dikembalikan.
+                </p>
             </Modal>
         </AdminLayout>
     );
