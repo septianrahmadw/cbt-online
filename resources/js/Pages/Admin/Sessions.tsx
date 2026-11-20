@@ -5,7 +5,7 @@ import { Badge, Button, Card, EmptyState, Modal, Tooltip } from '../../component
 import { useExamSessionsChannel } from '../../hooks/useReverb';
 import { useCountdown } from '../../hooks/useCountdown';
 import { AdminLayout } from '../../layouts/AdminLayout';
-import { cn, formatDuration } from '../../lib/utils';
+import { cn, formatDuration, formatExamSchedule } from '../../lib/utils';
 import type { SharedProps } from '../../types/shared';
 
 interface SessionParticipant {
@@ -76,14 +76,6 @@ function formatStartTime(value: string | null): string {
     }
 
     return new Date(value).toLocaleTimeString('id-ID', { hour: '2-digit', minute: '2-digit' });
-}
-
-function formatSchedule(start: string | null, end: string | null): string {
-    if (!start || !end) {
-        return 'Jadwal belum ditentukan';
-    }
-
-    return `${new Date(start).toLocaleString('id-ID')} s/d ${new Date(end).toLocaleString('id-ID')}`;
 }
 
 function InfoBlock({ icon, label, value }: { icon: ReactNode; label: string; value: ReactNode }) {
@@ -294,7 +286,7 @@ export default function Sessions({ sessions: initialSessions, exams, upcomingExa
                         <InfoBlock
                             icon={<CalendarClock size={14} />}
                             label="Waktu"
-                            value={formatSchedule(group.exam.exam_date, group.exam.exam_end_date)}
+                            value={formatExamSchedule(group.exam.exam_date, group.exam.exam_end_date)}
                         />
                         <InfoBlock
                             icon={<Clock size={14} />}
@@ -475,7 +467,7 @@ export default function Sessions({ sessions: initialSessions, exams, upcomingExa
                                 <InfoBlock
                                     icon={<CalendarClock size={14} />}
                                     label="Waktu"
-                                    value={formatSchedule(exam.exam_date, exam.exam_end_date)}
+                                    value={formatExamSchedule(exam.exam_date, exam.exam_end_date)}
                                 />
                                 <InfoBlock
                                     icon={<Clock size={14} />}

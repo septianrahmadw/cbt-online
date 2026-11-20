@@ -3,6 +3,7 @@ import { BookOpen, CalendarClock, CheckCircle2, Clock, Pencil, Plus, Trash2, Use
 import { type ReactNode } from 'react';
 import { Badge, Card, EmptyState } from '../../components/ui';
 import { AdminLayout } from '../../layouts/AdminLayout';
+import { formatExamSchedule } from '../../lib/utils';
 import type { SharedProps } from '../../types/shared';
 
 interface ExamCategory {
@@ -43,14 +44,6 @@ interface Paginator {
     prev_page_url: string | null;
     next_page_url: string | null;
     total: number;
-}
-
-function formatSchedule(start: string | null, end: string | null): string {
-    if (!start || !end) {
-        return 'Jadwal belum ditentukan';
-    }
-
-    return `${new Date(start).toLocaleString('id-ID')} s/d ${new Date(end).toLocaleString('id-ID')}`;
 }
 
 function InfoBlock({ icon, label, value }: { icon: ReactNode; label: string; value: ReactNode }) {
@@ -118,7 +111,7 @@ export default function Exams({ exams }: { exams: Paginator }) {
                                     <InfoBlock
                                         icon={<CalendarClock size={14} />}
                                         label="Waktu"
-                                        value={formatSchedule(exam.exam_date, exam.exam_end_date)}
+                                        value={formatExamSchedule(exam.exam_date, exam.exam_end_date)}
                                     />
                                     <InfoBlock
                                         icon={<Clock size={14} />}

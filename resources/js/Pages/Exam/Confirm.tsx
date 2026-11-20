@@ -13,6 +13,7 @@ import {
 } from 'lucide-react';
 import { Alert, Badge, Button, Card, EmptyState } from '../../components/ui';
 import { ExamLayout } from '../../layouts/ExamLayout';
+import { formatExamSchedule } from '../../lib/utils';
 import type { SharedProps } from '../../types/shared';
 
 type WindowState = 'unscheduled' | 'not_open' | 'open' | 'closed';
@@ -142,21 +143,7 @@ export default function ExamConfirm({
                                         <div className="mt-3 grid gap-1.5 text-xs text-slate-500 dark:text-slate-400 sm:grid-cols-2">
                                             <p className="flex items-center gap-1.5">
                                                 <CalendarClock size={13} className="shrink-0" />
-                                                {exam.exam_date && exam.exam_end_date
-                                                    ? `${new Date(exam.exam_date).toLocaleString('id-ID', {
-                                                          day: '2-digit',
-                                                          month: 'short',
-                                                          year: 'numeric',
-                                                          hour: '2-digit',
-                                                          minute: '2-digit',
-                                                      })} s/d ${new Date(exam.exam_end_date).toLocaleString('id-ID', {
-                                                          day: '2-digit',
-                                                          month: 'short',
-                                                          year: 'numeric',
-                                                          hour: '2-digit',
-                                                          minute: '2-digit',
-                                                      })}`
-                                                    : 'Jadwal belum ditentukan'}
+                                                {formatExamSchedule(exam.exam_date, exam.exam_end_date)}
                                             </p>
                                             <p className="flex items-center gap-1.5">
                                                 <Clock size={13} className="shrink-0" /> {exam.duration_minutes} menit
